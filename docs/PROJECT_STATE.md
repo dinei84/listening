@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-002 concluída — `core/models.py` implementado com modelos Pydantic e 4 testes passando.
+**Fase:** OS-003 concluída — `plugins/extractors/base.py` com métodos abstratos e `PyMuPDFExtractor` implementado com 5 testes passando.
 
-**Última OS concluída:** OS-002 — Modelos de dados base (`core/models.py`).
+**Última OS concluída:** OS-003 — Extractor base + PyMuPDFExtractor.
 
-**OS em andamento:** OS-003 — Extractor base + `PyMuPDFExtractor` (ver `docs/os/OS-003-pymupdf-extractor.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-003:** a definir — candidatos no backlog (seção 5) são o spike de heurística de OCR ou `KokoroSpeaker`.
+**Próxima OS a abrir:** a definir — candidatos no backlog (seção 5).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -43,8 +43,8 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
 | `core/pipeline.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
-| `plugins/extractors/base.py` | não iniciado | OS-001 | Contém só `class Extractor(ABC): pass` |
-| `plugins/extractors/pymupdf_extractor.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003 |
+| `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
+| `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-004 |
 | `plugins/speakers/base.py` | não iniciado | OS-001 | Contém só `class Speaker(ABC): pass` |
 | `plugins/speakers/kokoro_speaker.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003 |
@@ -61,7 +61,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: concluída
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
-3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: aberta, aguardando execução (ver `docs/os/OS-003-pymupdf-extractor.md`)
+3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
 4. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
 5. `plugins/speakers/base.py` + `KokoroSpeaker` (com testes, sem chamar engine real em CI)
 6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
