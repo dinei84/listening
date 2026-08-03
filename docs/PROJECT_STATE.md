@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-001 concluída — estrutura do repositório montada, dependências instaladas, smoke test passando.
+**Fase:** OS-001 concluída — estrutura de pastas, dependências, config e smoke test (6/6) prontos e commitados.
 
-**Última OS concluída:** OS-001 — Bootstrap do repositório e instalação de dependências.
+**Última OS concluída:** OS-001 — Bootstrap do repositório e instalação de dependências (ver `docs/os/OS-001-bootstrap-setup.md`).
 
-**OS em andamento:** OS-002 — `core/models.py` (ver `docs/OS/OS-002-core-models.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-002:** OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`.
+**Próxima OS a abrir:** OS-002 — `core/models.py` (ver `docs/os/OS-002-core-models.md`).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -31,6 +31,8 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | 3 | em aberto | Fila de jobs: Celery+Redis vs solução mais simples (SQLite como fila) | Pendente — depende do volume de uso real (projeto pessoal, não precisa de infra pesada) |
 | 4 | em aberto | Banco de dados: SQLite (MVP) com migração futura para Postgres | Pendente confirmação |
 | 5 | em aberto | Heurística de fallback de OCR (quando cair de Tesseract → PaddleOCR → cloud) | Precisa de uma OS dedicada de spike/pesquisa |
+| 6 | 2026-08-03 | Atualizações de governança (`AGENTS.md`, `README.md`, `TEMPLATE.md` etc.) feitas aqui no repositório de arquitetura precisam ser baixadas e commitadas manualmente no repositório de código — não há sincronização automática | Descoberto durante a OS-001: mudanças ficaram como "não commitadas" no repo de código e quase foram atribuídas erroneamente a um agente de execução. Toda vez que a documentação de governança for atualizada aqui, o próximo agente deve confirmar via `git diff` contra o último commit se os docs já estão sincronizados antes de assumir que uma mudança veio de execução indevida |
+| 7 | 2026-08-03 | Estrutura de documentação do repositório de código usa `docs/os/` e `docs/report/` em minúsculo (não `docs/OS/`/`docs/REPORT/`) | Encontrada divergência de caixa entre o que a governança definia e o que existia no repo de código; corrigido por renomeação para bater com a convenção documentada em `README.md` |
 
 > Toda OS que tomar uma decisão de arquitetura nova ou alterar uma decisão existente deve atualizar esta tabela.
 
@@ -38,27 +40,27 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 
 | Componente | Status | Última OS | Observações |
 |---|---|---|---|
-| `core/models.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-002 |
-| `core/pipeline.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
-| `core/config.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
-| `plugins/extractors/base.py` | concluído (testado) | OS-001 | Contém `class Extractor(ABC): pass` |
-| `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003 |
-| `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-004 |
-| `plugins/speakers/base.py` | concluído (testado) | OS-001 | Contém `class Speaker(ABC): pass` |
-| `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003 |
-| `processing/cleaner.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
-| `processing/chunker.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
-| `api/` (FastAPI) | concluído (testado) | OS-001 | Stubs vazios — implementação real é OS-005 |
-| `worker/` (fila) | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-005+ |
-| `storage/` | concluído (testado) | OS-001 | Stubs vazios — implementação real é OS-005+ |
-| `player/` (frontend) | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-006 |
+| `core/models.py` | não iniciado | OS-001 | Stub vazio (`0 bytes`) criado pelo bootstrap — implementação real é OS-002 |
+| `core/pipeline.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `plugins/extractors/base.py` | não iniciado | OS-001 | Contém só `class Extractor(ABC): pass` |
+| `plugins/extractors/pymupdf_extractor.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003 |
+| `plugins/extractors/tesseract_ocr.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-004 |
+| `plugins/speakers/base.py` | não iniciado | OS-001 | Contém só `class Speaker(ABC): pass` |
+| `plugins/speakers/kokoro_speaker.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003 |
+| `processing/cleaner.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `processing/chunker.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
+| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — implementação real é OS-005+ |
+| `storage/` | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
+| `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-006 |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
 ## 5. Backlog priorizado (próximas OS candidatas)
 
 1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: concluída
-2. **OS-002 — `core/models.py`** — modelos de dados base — status: aberta, aguardando OS-001
+2. **OS-002 — `core/models.py`** — modelos de dados base — status: aberta, pronta para despachar
 3. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
 4. `plugins/extractors/base.py` + `PyMuPDFExtractor` (com testes)
 5. `plugins/speakers/base.py` + `KokoroSpeaker` (com testes, sem chamar engine real em CI)
@@ -71,6 +73,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 - `tesseract` binary não instalado no sistema — `pytesseract` importa mas não executa sem o binário. Documentado no README.md do código.
 - Decisões #3, #4, #5 ainda em aberto (fila de jobs, banco de dados, heurística de fallback de OCR).
+- PR da OS-001 ainda não aberto — `gh` não estava autenticado; pendente até o dono autenticar.
 
 ## 7. Como este arquivo deve ser mantido
 

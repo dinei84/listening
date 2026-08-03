@@ -1,4 +1,4 @@
-# OS-001 — Modelos de dados base (core/models.py)
+# OS-002 — Modelos de dados base (core/models.py)
 
 ## 1. Objetivo
 
