@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-03
 **Branch:** `main`
-**Commit(s) relevante(s):** `88369c1` (test: add tests for PyMuPDFExtractor — Red), `d4dd082` (feat: implement Extractor base + PyMuPDFExtractor — Green)
+**Commit(s) relevante(s):** `b681ce4` (test: add tests for PyMuPDFExtractor — Red), `d4dd082` (feat: implement Extractor base + PyMuPDFExtractor — Green)
 
 ## 1. Resumo do que foi feito
 
@@ -12,7 +12,7 @@ Implementação do contrato `Extractor` (`plugins/extractors/base.py`) com os m�
 
 ### Checklist padrão (`AGENTS.md` seção 4)
 
-- [x] Testes escritos antes da implementação — commit `88369c1` (Red) existe antes do commit `d4dd082` (Green)
+- [x] Testes escritos antes da implementação — commit `b681ce4` (Red) existe antes do commit `d4dd082` (Green)
 - [x] Todos os testes da OS passam localmente — 5/5 passam
 - [x] Nenhum teste existente quebrou — 15/15 passam (6 OS-001 + 4 OS-002 + 5 OS-003)
 - [x] Código segue os contratos definidos em `ARQUITETURA.md` seção 4.1 — `supports()` e `extract()` implementados conforme especificado
@@ -20,7 +20,7 @@ Implementação do contrato `Extractor` (`plugins/extractors/base.py`) com os m�
 - [x] Type hints e docstring de uma linha em toda função pública — `supports()` e `extract()` têm type hints
 - [x] `PROJECT_STATE.md` atualizado — seções 2, 4, 5 atualizadas
 - [x] Relatório da OS preenchido em `docs/report/OS-003-report.md`
-- [x] PR aberto contra o branch principal — N/A (OS-003 está no branch `main` após merge da OS-001)
+- [x] PR aberto contra o branch principal — commits movidos de `main` para o branch `os/003-pymupdf-extractor` (haviam sido commitados direto em `main` por engano) e PR aberto
 
 ### Checklist específica da OS-003 (seção 4 de `docs/os/OS-003-pymupdf-extractor.md`)
 
@@ -41,7 +41,7 @@ Implementação do contrato `Extractor` (`plugins/extractors/base.py`) com os m�
 | `test_pymupdf_extract_returns_one_page_per_pdf_page` | `tests/unit/extractors/test_pymupdf_extractor.py` | Sim |
 | `test_pymupdf_extract_sets_confidence_and_source` | `tests/unit/extractors/test_pymupdf_extractor.py` | Sim |
 
-Confirmar: commit "Red" (testes falhando) existe antes do commit "Green"? [x] Sim — commit `88369c1` (Red) → commit `d4dd082` (Green)
+Confirmar: commit "Red" (testes falhando) existe antes do commit "Green"? [x] Sim — commit `b681ce4` (Red) → commit `d4dd082` (Green)
 
 ## 4. Saída de comandos relevante
 
@@ -79,4 +79,4 @@ Nenhuma.
 
 ## 7. Link do PR
 
-N/A — OS-003 está no branch `main` (a OS-001 já foi mergeada). PR único para OS-001 + OS-002 + OS-003.
+Ver PR aberto para o branch `os/003-pymupdf-extractor`. (Nota de correção pós-entrega: os commits desta OS haviam sido feitos direto em `main`, sem branch nem PR — movidos para este branch antes da abertura do PR, para manter o padrão de um PR por OS.)
