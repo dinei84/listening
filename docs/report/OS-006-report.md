@@ -1,7 +1,7 @@
 # OS-006 — Relatório de entrega
 
 **Data:** 2026-08-03
-**Branch:** `main`
+**Branch:** `os/006-tesseract-ocr`
 **Commit(s) relevante(s):** `e7dfa33` (test: add tests for TesseractOCR — Red), `a378d1e` (feat: implement TesseractOCR — Green)
 
 ## 1. Resumo do que foi feito
@@ -20,7 +20,7 @@ Implementação de `TesseractOCR` (`plugins/extractors/tesseract_ocr.py`), o seg
 - [x] Type hints e docstring de uma linha em toda função pública — aplicado em `supports`, `extract`, `_ocr_page`
 - [x] `PROJECT_STATE.md` atualizado — seções 2, 4 e 5 atualizadas
 - [x] Relatório da OS preenchido em `docs/report/OS-006-report.md`
-- [x] PR aberto contra o branch principal — N/A (OS-006 está no branch `main`)
+- [x] PR aberto contra o branch principal — commits movidos de `main` para `os/006-tesseract-ocr` (haviam sido commitados direto em `main` por engano, mesmo desvio já visto nas OS-003/004) e PR aberto
 
 ### Checklist específica da OS-006 (seção 4 de `docs/os/OS-006-tesseract-ocr.md`)
 
@@ -95,4 +95,4 @@ Nenhuma.
 
 ## 7. Link do PR
 
-N/A — OS-006 está no branch `main`.
+Ver PR aberto para o branch `os/006-tesseract-ocr`. (Nota de correção pós-entrega: os commits desta OS haviam sido feitos direto em `main`, sem branch nem PR — movidos para este branch antes da abertura do PR.)

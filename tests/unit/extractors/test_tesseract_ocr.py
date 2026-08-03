@@ -3,9 +3,7 @@ import os
 from core.models import ExtractedPage
 from plugins.extractors.tesseract_ocr import TesseractOCR
 
-FIXTURES_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "fixtures", "ocr"
-)
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "fixtures", "ocr")
 
 
 def _fixture(name: str) -> str:
