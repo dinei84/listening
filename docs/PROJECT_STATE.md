@@ -73,7 +73,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 - `tesseract` binary não instalado no sistema — `pytesseract` importa mas não executa sem o binário. Documentado no README.md do código.
 - Decisões #3, #4, #5 ainda em aberto (fila de jobs, banco de dados, heurística de fallback de OCR).
-- PR da OS-001 ainda não aberto — `gh` não estava autenticado; pendente até o dono autenticar.
+- Branch padrão do repositório no GitHub ainda está como `os/001-bootstrap-setup` em vez de `main` (ficou assim porque foi a primeira branch enviada ao remoto) — trocar em Settings > Branches depois que o PR #1 for mergeado.
 
 ## 7. Como este arquivo deve ser mantido
 
