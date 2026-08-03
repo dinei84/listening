@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from core.models import ExtractedPage
+
 from plugins.extractors.base import Extractor
 from plugins.extractors.pymupdf_extractor import PyMuPDFExtractor
 
