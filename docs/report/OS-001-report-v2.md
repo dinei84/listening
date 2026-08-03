@@ -20,7 +20,7 @@ Retomada da OS-001-bootstrap-setup após interrupção de agente anterior. O esq
 - [x] Type hints e docstring de uma linha em toda função pública — não aplicável (funções de teste, não de produção)
 - [x] `PROJECT_STATE.md` atualizado — seções 2, 4, 5 e 6 atualizadas
 - [x] Relatório da OS preenchido em `docs/report/OS-001-report-v2.md` (nunca dentro do arquivo da OS)
-- [x] PR aberto contra o branch principal, com título no formato `[OS-001] bootstrap: estrutura do repositório, smoke test e README` — link: https://github.com/dinei84/listening/pull/1
+- [ ] PR aberto contra o branch principal, com título no formato `[OS-001] bootstrap: estrutura do repositório, smoke test e README` — **PR não aberto**: `gh` CLI não está autenticado neste ambiente. Executar manualmente: `gh pr create --title "[OS-001] bootstrap: estrutura do repositório, smoke test e README" --body "Retomada da OS-001..." --base main --head os/001-bootstrap-setup`
 
 ### Checklist específica da OS-001 (seção 5 de `docs/OS/OS-001-bootstrap-setup.md`)
 
@@ -85,4 +85,8 @@ Nenhum. Todas as alterações estão dentro do escopo da OS-001:
 
 ## 7. Link do PR
 
-https://github.com/dinei84/listening/pull/1
+**PR não aberto** — `gh` CLI não está autenticado neste ambiente. Abrir manualmente com:
+
+```bash
+gh pr create --title "[OS-001] bootstrap: estrutura do repositório, smoke test e README" --body "Retomada da OS-001 após interrupção de agente anterior. Smoke tests (6/6), README, PROJECT_STATE.md atualizados." --base main --head os/001-bootstrap-setup
+```
