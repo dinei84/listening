@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-005 — Spike de heurística de fallback de OCR.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-006 — `TesseractOCR` usando a heurística aprovada (ver `docs/os/OS-006-tesseract-ocr.md`).
 
-**Próxima OS a abrir:** implementar `TesseractOCR` usando a heurística aprovada, ou seguir com `core/pipeline.py` — a definir com o dono do projeto.
+**Próxima OS a abrir após OS-006:** a definir — candidato no backlog é `core/pipeline.py`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -55,7 +55,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
 | `worker/` (fila) | não iniciado | OS-001 | Stub vazio — implementação real é OS-005+ |
 | `storage/` | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
-| `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-006 |
+| `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
@@ -66,7 +66,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
 4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
 5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: concluída, heurística aprovada (decisão #9)
-6. `plugins/extractors/tesseract_ocr.py` — `TesseractOCR` usando a heurística aprovada
+6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: aberta, aguardando execução (ver `docs/os/OS-006-tesseract-ocr.md`)
 7. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
 8. `processing/cleaner.py` e `processing/chunker.py`
 9. API mínima (`POST /books`, `GET /books/{id}/status`)
