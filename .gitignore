@@ -1,0 +1,28 @@
+# Ambiente virtual Python
+venv/
+.env
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Arquivos de áudio gerados (mantém fixtures versionadas)
+*.mp3
+*.wav
+!tests/fixtures/**/*.mp3
+!tests/fixtures/**/*.wav
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
