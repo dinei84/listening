@@ -12,11 +12,11 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-005 concluída (spike) — heurística de fallback de OCR aprovada (decisão #9) e já documentada em `ARQUITETURA.md` seção 4.1.
+**Fase:** OS-006 concluída — `TesseractOCR` implementado com a fórmula de confidence aprovada (decisão #9) e 7 testes passando.
 
-**Última OS concluída:** OS-005 — Spike de heurística de fallback de OCR.
+**Última OS concluída:** OS-006 — TesseractOCR.
 
-**OS em andamento:** OS-006 — `TesseractOCR` usando a heurística aprovada (ver `docs/os/OS-006-tesseract-ocr.md`).
+**OS em andamento:** nenhuma.
 
 **Próxima OS a abrir após OS-006:** a definir — candidato no backlog é `core/pipeline.py`.
 
@@ -47,7 +47,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
-| `plugins/extractors/tesseract_ocr.py` | não iniciado | OS-001 | Stub vazio — heurística de confidence já aprovada (decisão #9), livre para ganhar OS própria |
+| `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
 | `plugins/speakers/base.py` | concluído (testado) | OS-004 | Classe abstrata `Speaker` com `synthesize()` e `cost_per_char` |
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
@@ -66,7 +66,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
 4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
 5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: concluída, heurística aprovada (decisão #9)
-6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: aberta, aguardando execução (ver `docs/os/OS-006-tesseract-ocr.md`)
+6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: concluída
 7. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
 8. `processing/cleaner.py` e `processing/chunker.py`
 9. API mínima (`POST /books`, `GET /books/{id}/status`)
