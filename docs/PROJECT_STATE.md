@@ -16,7 +16,7 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-004 — Speaker base + KokoroSpeaker.
 
-**OS em andamento:** OS-005 — Spike: heurística de fallback de OCR (ver `docs/os/OS-005-spike-ocr-fallback-heuristic.md`). É uma OS de pesquisa/decisão, não de implementação — entregável é uma recomendação documentada, não código.
+**OS em andamento:** OS-005 — Spike: heurística de fallback de OCR (ver `docs/os/OS-005-spike-ocr-fallback-heuristic.md`) — **bloqueada**: `tesseract-ocr` não está instalado e o ambiente do agente não tem `sudo` interativo. Ver `docs/report/OS-005-report.md` e seção 6 (riscos) abaixo.
 
 **Próxima OS a abrir após OS-005:** a definir com base no resultado do spike — provavelmente `TesseractOCR` (implementação real usando a heurística decidida) ou `core/pipeline.py`.
 
@@ -63,7 +63,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
 3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
 4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
-5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: aberta, aguardando execução (ver `docs/os/OS-005-spike-ocr-fallback-heuristic.md`)
+5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: bloqueada, aguardando instalação de `tesseract-ocr` pelo dono do projeto (ver `docs/os/OS-005-spike-ocr-fallback-heuristic.md` e `docs/report/OS-005-report.md`)
 6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
 7. `processing/cleaner.py` e `processing/chunker.py`
 8. API mínima (`POST /books`, `GET /books/{id}/status`)
@@ -71,7 +71,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 ## 6. Riscos e bloqueios conhecidos
 
-- `tesseract` binary não instalado no sistema — `pytesseract` importa mas não executa sem o binário. Documentado no README.md do código.
+- `tesseract` binary não instalado no sistema, e o ambiente de execução dos agentes não tem `sudo` interativo — bloqueia a OS-005 até o dono do projeto rodar `sudo apt install -y tesseract-ocr` manualmente.
 - Decisões #3, #4, #5 ainda em aberto (fila de jobs, banco de dados, heurística de fallback de OCR).
 
 ## 7. Como este arquivo deve ser mantido
