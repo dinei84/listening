@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** Planejamento / arquitetura — nenhum código implementado ainda.
+**Fase:** OS-001 concluída — estrutura do repositório montada, dependências instaladas, smoke test passando.
 
-**Última OS concluída:** nenhuma.
+**Última OS concluída:** OS-001 — Bootstrap do repositório e instalação de dependências.
 
-**OS em andamento:** OS-001 — Bootstrap do repositório e instalação de dependências (ver `docs/os/OS-001-bootstrap-setup.md`).
+**OS em andamento:** OS-002 — `core/models.py` (ver `docs/OS/OS-002-core-models.md`).
 
-**Próxima OS a abrir após OS-001:** OS-002 — `core/models.py` (ver `docs/os/OS-002-core-models.md`).
+**Próxima OS a abrir após OS-002:** OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -38,26 +38,26 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 
 | Componente | Status | Última OS | Observações |
 |---|---|---|---|
-| `core/models.py` | não iniciado | — | |
-| `core/pipeline.py` | não iniciado | — | |
-| `core/config.py` | não iniciado | — | |
-| `plugins/extractors/base.py` | não iniciado | — | |
-| `plugins/extractors/pymupdf_extractor.py` | não iniciado | — | |
-| `plugins/extractors/tesseract_ocr.py` | não iniciado | — | |
-| `plugins/speakers/base.py` | não iniciado | — | |
-| `plugins/speakers/kokoro_speaker.py` | não iniciado | — | |
-| `processing/cleaner.py` | não iniciado | — | |
-| `processing/chunker.py` | não iniciado | — | |
-| `api/` (FastAPI) | não iniciado | — | |
-| `worker/` (fila) | não iniciado | — | |
-| `storage/` | não iniciado | — | |
-| `player/` (frontend) | não iniciado | — | |
+| `core/models.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-002 |
+| `core/pipeline.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `core/config.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `plugins/extractors/base.py` | concluído (testado) | OS-001 | Contém `class Extractor(ABC): pass` |
+| `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003 |
+| `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-004 |
+| `plugins/speakers/base.py` | concluído (testado) | OS-001 | Contém `class Speaker(ABC): pass` |
+| `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003 |
+| `processing/cleaner.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `processing/chunker.py` | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `api/` (FastAPI) | concluído (testado) | OS-001 | Stubs vazios — implementação real é OS-005 |
+| `worker/` (fila) | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-005+ |
+| `storage/` | concluído (testado) | OS-001 | Stubs vazios — implementação real é OS-005+ |
+| `player/` (frontend) | concluído (testado) | OS-001 | Stub vazio — implementação real é OS-006 |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
 ## 5. Backlog priorizado (próximas OS candidatas)
 
-1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: aberta, aguardando execução
+1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: concluída
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: aberta, aguardando OS-001
 3. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
 4. `plugins/extractors/base.py` + `PyMuPDFExtractor` (com testes)
@@ -69,7 +69,8 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 ## 6. Riscos e bloqueios conhecidos
 
-- Nenhum ainda — projeto em fase zero.
+- `tesseract` binary não instalado no sistema — `pytesseract` importa mas não executa sem o binário. Documentado no README.md do código.
+- Decisões #3, #4, #5 ainda em aberto (fila de jobs, banco de dados, heurística de fallback de OCR).
 
 ## 7. Como este arquivo deve ser mantido
 
