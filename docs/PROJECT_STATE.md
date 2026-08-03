@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-004 — Speaker base + KokoroSpeaker.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-005 — Spike: heurística de fallback de OCR (ver `docs/os/OS-005-spike-ocr-fallback-heuristic.md`). É uma OS de pesquisa/decisão, não de implementação — entregável é uma recomendação documentada, não código.
 
-**Próxima OS a abrir:** a definir — candidato no backlog é o spike de heurística de OCR (decisão #5).
+**Próxima OS a abrir após OS-005:** a definir com base no resultado do spike — provavelmente `TesseractOCR` (implementação real usando a heurística decidida) ou `core/pipeline.py`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -63,7 +63,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
 3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
 4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
-5. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
+5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: aberta, aguardando execução (ver `docs/os/OS-005-spike-ocr-fallback-heuristic.md`)
 6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
 7. `processing/cleaner.py` e `processing/chunker.py`
 8. API mínima (`POST /books`, `GET /books/{id}/status`)
