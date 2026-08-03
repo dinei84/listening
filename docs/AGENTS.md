@@ -2,6 +2,8 @@
 
 Regras de trabalho para qualquer agente de IA que for executar uma Ordem de Serviço (OS) neste projeto. Leitura obrigatória antes de tocar em código.
 
+> Estas regras valem independente da ferramenta de execução — opencode, Claude Desktop, ou qualquer outra. Ao trocar de ferramenta, ler `HANDOFF.md` primeiro para contexto de continuidade, depois este arquivo.
+
 ---
 
 ## 1. Papéis
@@ -19,7 +21,7 @@ O agente de execução **não decide arquitetura**. Se a OS não cobrir um caso 
 3. Agente escreve os testes primeiro (ver `TDD.md`) — comita os testes falhando antes de qualquer implementação.
 4. Agente implementa o mínimo necessário para os testes passarem.
 5. Agente roda a checklist de DoD (seção 4 deste arquivo, e a checklist específica da OS).
-6. Agente preenche o relatório de entrega (template em `docs/os/TEMPLATE.md`, seção "Relatório").
+6. Agente cria o relatório de entrega em `docs/report/OS-NNN-report.md` (template em `docs/report/REPORT_TEMPLATE.md`). **O relatório nunca é escrito dentro do arquivo da OS** (`docs/os/OS-NNN-*.md`) — a definição da OS é instrução estável, o relatório é o resultado da execução, e os dois vivem em pastas separadas.
 7. Agente abre PR curto, referenciando o número da OS.
 8. Agente atualiza `PROJECT_STATE.md` (status do componente, decisões novas se houver).
 
@@ -41,7 +43,7 @@ Toda OS herda esta checklist, além dos critérios específicos definidos na pr�
 - [ ] Nenhuma chamada real a API paga (OCR cloud, TTS cloud) dentro dos testes — tudo mockado
 - [ ] Type hints e docstring de uma linha em toda função pública
 - [ ] `PROJECT_STATE.md` atualizado (status do componente + decisões novas, se houver)
-- [ ] Relatório da OS preenchido (seção "Relatório" do template)
+- [ ] Relatório criado em `docs/report/OS-NNN-report.md` (nunca dentro do arquivo da própria OS)
 - [ ] PR aberto contra o branch principal, com título no formato `[OS-NNN] descrição curta`
 
 Uma OS só está "concluída" quando todos os itens acima estão marcados. Se algum item não se aplica, o relatório deve dizer explicitamente por quê — não deixar em branco.
@@ -67,3 +69,4 @@ Se o agente encontrar ambiguidade, contrato faltando, ou dependência não resol
 3. `AGENTS.md` — este arquivo
 4. `TDD.md` — como escrever os testes antes do código
 5. `docs/os/TEMPLATE.md` — template da OS específica que o agente recebeu
+6. `docs/report/REPORT_TEMPLATE.md` — template do relatório de entrega, preenchido ao final

@@ -30,32 +30,6 @@ Listar os casos de teste esperados, mesmo que em alto nível — o agente detalh
 - `test_...`
 - `test_...`
 
-## 6. Relatório (preenchido pelo agente ao final)
+## 6. Relatório
 
-### 6.1 Resumo do que foi feito
-
-[1-3 frases]
-
-### 6.2 Checklist de DoD
-
-Colar aqui a checklist da seção 4 acima e da checklist padrão de `AGENTS.md`, marcada.
-
-### 6.3 Testes escritos
-
-| Teste | Arquivo | Passou? |
-|---|---|---|
-| | | |
-
-Confirmar: commit "Red" (testes falhando) existe antes do commit "Green"? [ ] Sim [ ] Não
-
-### 6.4 Desvios do escopo original
-
-[Se houve qualquer desvio do que foi definido na seção 2, explicar aqui. Se não houve, escrever "Nenhum".]
-
-### 6.5 Dúvidas / bloqueios
-
-[Qualquer decisão de arquitetura que não estava coberta pela OS e que o agente não tomou sozinho. Se nenhuma, escrever "Nenhuma".]
-
-### 6.6 Link do PR
-
-[URL do PR aberto]
+O relatório desta OS **não é escrito neste arquivo**. Ao concluir, criar `docs/report/OS-NNN-report.md` a partir de `docs/report/REPORT_TEMPLATE.md`. Este arquivo (a definição da OS) permanece estático como registro do que foi pedido; o relatório é o registro separado do que foi de fato entregue.
