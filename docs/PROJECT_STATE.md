@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-005 concluída (spike) — heurística de fallback de OCR proposta com evidência empírica de Tesseract e pendente de aprovação arquitetural.
+**Fase:** OS-005 concluída (spike) — heurística de fallback de OCR aprovada (decisão #9) e já documentada em `ARQUITETURA.md` seção 4.1.
 
 **Última OS concluída:** OS-005 — Spike de heurística de fallback de OCR.
 
 **OS em andamento:** nenhuma.
 
-**Próxima OS a abrir:** implementar `TesseractOCR` usando a heurística proposta (após aprovação da decisão #8) ou seguir com `core/pipeline.py`.
+**Próxima OS a abrir:** implementar `TesseractOCR` usando a heurística aprovada, ou seguir com `core/pipeline.py` — a definir com o dono do projeto.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -33,7 +33,8 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | 5 | em aberto | Heurística de fallback de OCR (quando cair de Tesseract → PaddleOCR → cloud) | Precisa de uma OS dedicada de spike/pesquisa |
 | 6 | 2026-08-03 | Atualizações de governança (`AGENTS.md`, `README.md`, `TEMPLATE.md` etc.) feitas aqui no repositório de arquitetura precisam ser baixadas e commitadas manualmente no repositório de código — não há sincronização automática | Descoberto durante a OS-001: mudanças ficaram como "não commitadas" no repo de código e quase foram atribuídas erroneamente a um agente de execução. Toda vez que a documentação de governança for atualizada aqui, o próximo agente deve confirmar via `git diff` contra o último commit se os docs já estão sincronizados antes de assumir que uma mudança veio de execução indevida |
 | 7 | 2026-08-03 | Estrutura de documentação do repositório de código usa `docs/os/` e `docs/report/` em minúsculo (não `docs/OS/`/`docs/REPORT/`) | Encontrada divergência de caixa entre o que a governança definia e o que existia no repo de código; corrigido por renomeação para bater com a convenção documentada em `README.md` |
-| 8 | 2026-08-03 | **Proposta pendente de aprovação (OS-005):** considerar OCR "confiança baixa" quando `avg_confidence_words_normalized < 0.85` **ou** `words_counted == 0`; nesses casos, cair para o próximo extractor da cadeia (`TesseractOCR` → `PaddleOCR` → `CloudOCRFallback`) | Spike empírico com Tesseract 5.3.4 em 4 fixtures mostrou cenários de alta confiança (~0.90-0.96) e falha total (`words_counted == 0`, confiança 0.0) em imagem muito degradada. PaddleOCR confidence pesquisado em documentação oficial (`rec_score` / `rec_scores`) mas **não validado empiricamente** neste ambiente |
+| 8 | 2026-08-03 | Proposta (OS-005): considerar OCR "confiança baixa" quando `avg_confidence_words_normalized < 0.85` **ou** `words_counted == 0`; nesses casos, cair para o próximo extractor da cadeia (`TesseractOCR` → `PaddleOCR` → `CloudOCRFallback`) | Spike empírico com Tesseract 5.3.4 em 4 fixtures mostrou cenários de alta confiança (~0.90-0.96) e falha total (`words_counted == 0`, confiança 0.0) em imagem muito degradada. PaddleOCR confidence pesquisado em documentação oficial (`rec_score` / `rec_scores`) mas **não validado empiricamente** neste ambiente |
+| 9 | 2026-08-03 | **Decisão #8 aprovada pelo dono do projeto, sem alterações.** A heurística `avg_confidence_words_normalized < 0.85` ou `words_counted == 0` é agora oficial e foi incorporada em `ARQUITETURA.md` seção 4.1. Isso resolve a decisão #5 | Aprovação explícita em conversa, após revisão que confirmou a reprodutibilidade dos números do spike. Ressalva conhecida (não invalida a aprovação): as fixtures usadas cobriram bem sucesso (~0.90-0.96) e falha total (0.0), mas não um caso de degradação intermediária — `0.85` é uma margem de segurança, não um ponto fino validado empiricamente |
 
 > Toda OS que tomar uma decisão de arquitetura nova ou alterar uma decisão existente deve atualizar esta tabela.
 
@@ -46,7 +47,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
-| `plugins/extractors/tesseract_ocr.py` | não iniciado | OS-001 | Stub vazio — depende do spike de heurística de fallback (decisão #5) antes de ter OS própria |
+| `plugins/extractors/tesseract_ocr.py` | não iniciado | OS-001 | Stub vazio — heurística de confidence já aprovada (decisão #9), livre para ganhar OS própria |
 | `plugins/speakers/base.py` | concluído (testado) | OS-004 | Classe abstrata `Speaker` com `synthesize()` e `cost_per_char` |
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
@@ -64,17 +65,18 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
 3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
 4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
-5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: concluída (proposta registrada na decisão #8, pendente de aprovação)
-6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
-7. `processing/cleaner.py` e `processing/chunker.py`
-8. API mínima (`POST /books`, `GET /books/{id}/status`)
-9. Player web básico
+5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: concluída, heurística aprovada (decisão #9)
+6. `plugins/extractors/tesseract_ocr.py` — `TesseractOCR` usando a heurística aprovada
+7. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
+8. `processing/cleaner.py` e `processing/chunker.py`
+9. API mínima (`POST /books`, `GET /books/{id}/status`)
+10. Player web básico
 
 ## 6. Riscos e bloqueios conhecidos
 
 - Decisões #3 e #4 ainda em aberto (fila de jobs e banco de dados).
-- Decisão #5 agora tem proposta concreta (decisão #8), mas ainda depende de aprovação do dono do projeto.
-- Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike.
+- Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike — validar quando `PaddleOCR` ganhar OS própria.
+- Threshold `0.85` (decisão #9) é uma margem de segurança, não um ponto fino validado empiricamente — as fixtures do spike não cobriram degradação intermediária. Se `TesseractOCR` em produção mostrar falsos positivos/negativos de fallback, revisitar com mais dados.
 
 ## 7. Como este arquivo deve ser mantido
 

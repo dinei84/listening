@@ -92,6 +92,13 @@ class Extractor(ABC):
 
 Regra de decisão do pipeline: tentar `PyMuPDFExtractor` primeiro (grátis, rápido). Se `supports()` retornar `False` ou a confiança vier baixa, cair para `TesseractOCR` → `PaddleOCR` → `CloudOCRFallback`, nessa ordem de custo crescente.
 
+**Heurística de "confiança baixa" (decisão #8/#9 em `PROJECT_STATE.md`, aprovada após spike da OS-005):** cair para o próximo extractor da cadeia quando `avg_confidence_words_normalized < 0.85` **ou** `words_counted == 0`. Preenchimento de `ExtractedPage.confidence` por extractor:
+
+- **TesseractOCR:** coletar `conf` por palavra via `pytesseract.image_to_data()`, filtrar entradas com `text != ""` e `conf >= 0`, `confidence = mean(conf_filtrado) / 100.0`. Sem palavras válidas → `confidence = 0.0`.
+- **PaddleOCR:** usar `rec_score`/`rec_scores` por item reconhecido, `confidence = mean(rec_scores_da_página)`. Sem itens reconhecidos → `confidence = 0.0`.
+
+Evidência: `docs/report/OS-005-report.md`. Nota de limitação (registrada no spike, não invalida a decisão): as fixtures usadas cobriram bem os dois extremos (texto legível ~0.90-0.96 / falha total 0.0), mas não um caso de degradação intermediária — o valor `0.85` é uma margem de segurança abaixo do cluster de sucesso observado, não um ponto de corte fino validado empiricamente.
+
 ### 4.2 Speaker (TTS)
 
 ```python
