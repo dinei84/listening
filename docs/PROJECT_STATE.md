@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-007 concluída — `core/pipeline.py` orquestra extração com fallback e síntese via `plugins/registry.py`/`core/config.py`, agora preenchidos pela primeira vez. 7 testes passando (33 no total do projeto).
+**Fase:** OS-008 concluída — `processing/cleaner.py` (remoção de headers/footers repetidos + correção de hifenização) e `processing/chunker.py` (chunking por sentença, `max_chars` configurável, nunca corta sentença ao meio) implementados e testados, usando só stdlib (`re`, `collections.Counter`). 9 testes passando (42 no total do projeto). Ainda não ligados a `core/pipeline.py` — fora do escopo desta OS.
 
-**Última OS concluída:** OS-007 — core/pipeline.py.
+**Última OS concluída:** OS-008 — processing/cleaner.py + processing/chunker.py.
 
-**OS em andamento:** OS-008 — `processing/cleaner.py` + `processing/chunker.py` (ver `docs/os/OS-008-cleaner-chunker.md`). Ligar essas funções em `core/pipeline.py` fica para uma OS seguinte.
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-008:** a definir — candidatos são ligar cleaner/chunker em `core/pipeline.py`, ou API mínima.
+**Próxima OS a abrir:** a definir — candidatos são ligar cleaner/chunker em `core/pipeline.py`, ou API mínima.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -51,8 +51,8 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
 | `plugins/speakers/base.py` | concluído (testado) | OS-004 | Classe abstrata `Speaker` com `synthesize()` e `cost_per_char` |
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
-| `processing/cleaner.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-008 |
-| `processing/chunker.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-008 |
+| `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
+| `processing/chunker.py` | concluído (testado) | OS-008 | `chunk_text(text, max_chars=1000)` divide por sentença via `re`, nunca corta sentença ao meio (sentença isolada maior que `max_chars` vira chunk próprio) |
 | `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
 | `worker/` (fila) | não iniciado | OS-001 | Stub vazio — implementação real é OS-005+ |
 | `storage/` | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
@@ -69,7 +69,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: concluída, heurística aprovada (decisão #9)
 6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: concluída
 7. **OS-007 — `core/pipeline.py`** — orquestração síncrona mínima ligando extractor → speaker (+ preenche `plugins/registry.py` e `core/config.py`) — status: concluída
-8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: aberta, aguardando execução (ver `docs/os/OS-008-cleaner-chunker.md`)
+8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
 9. Ligar cleaner/chunker em `core/pipeline.py` (substitui a síntese de texto inteiro numa chamada só)
 10. API mínima (`POST /books`, `GET /books/{id}/status`)
 11. Player web básico
