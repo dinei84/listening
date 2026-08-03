@@ -22,7 +22,10 @@ class FakePrimaryExtractor(Extractor):
     def extract(self, pdf_path, page_range=None):
         return [
             ExtractedPage(
-                page_number=1, text="primary text", confidence=1.0, source="fake_primary"
+                page_number=1,
+                text="primary text",
+                confidence=1.0,
+                source="fake_primary",
             )
         ]
 
