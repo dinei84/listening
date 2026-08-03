@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-003 concluída — `plugins/extractors/base.py` com métodos abstratos e `PyMuPDFExtractor` implementado com 5 testes passando.
+**Fase:** OS-004 concluída — `plugins/speakers/base.py` com métodos abstratos e `KokoroSpeaker` implementado com 4 testes passando (todos com mock da inferência Kokoro).
 
-**Última OS concluída:** OS-003 — Extractor base + PyMuPDFExtractor.
+**Última OS concluída:** OS-004 — Speaker base + KokoroSpeaker.
 
-**OS em andamento:** OS-004 — Speaker base + `KokoroSpeaker` (ver `docs/os/OS-004-kokoro-speaker.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-004:** a definir — candidato no backlog é o spike de heurística de OCR (decisão #5).
+**Próxima OS a abrir:** a definir — candidato no backlog é o spike de heurística de OCR (decisão #5).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -46,8 +46,8 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | não iniciado | OS-001 | Stub vazio — depende do spike de heurística de fallback (decisão #5) antes de ter OS própria |
-| `plugins/speakers/base.py` | não iniciado | OS-001 | Contém só `class Speaker(ABC): pass` |
-| `plugins/speakers/kokoro_speaker.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-004 |
+| `plugins/speakers/base.py` | concluído (testado) | OS-004 | Classe abstrata `Speaker` com `synthesize()` e `cost_per_char` |
+| `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `processing/chunker.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
@@ -62,7 +62,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: concluída
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
 3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: concluída
-4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: aberta, aguardando execução (ver `docs/os/OS-004-kokoro-speaker.md`)
+4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
 5. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
 6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
 7. `processing/cleaner.py` e `processing/chunker.py`
