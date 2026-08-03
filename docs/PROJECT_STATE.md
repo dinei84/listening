@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-001 concluída — estrutura de pastas, dependências, config e smoke test (6/6) prontos e commitados.
+**Fase:** OS-002 concluída — `core/models.py` implementado com modelos Pydantic e 4 testes passando.
 
-**Última OS concluída:** OS-001 — Bootstrap do repositório e instalação de dependências (ver `docs/os/OS-001-bootstrap-setup.md`).
+**Última OS concluída:** OS-002 — Modelos de dados base (`core/models.py`).
 
 **OS em andamento:** nenhuma.
 
-**Próxima OS a abrir:** OS-002 — `core/models.py` (ver `docs/os/OS-002-core-models.md`).
+**Próxima OS a abrir:** OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -40,7 +40,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 
 | Componente | Status | Última OS | Observações |
 |---|---|---|---|
-| `core/models.py` | não iniciado | OS-001 | Stub vazio (`0 bytes`) criado pelo bootstrap — implementação real é OS-002 |
+| `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
 | `core/pipeline.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
 | `plugins/extractors/base.py` | não iniciado | OS-001 | Contém só `class Extractor(ABC): pass` |
@@ -60,9 +60,9 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 ## 5. Backlog priorizado (próximas OS candidatas)
 
 1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: concluída
-2. **OS-002 — `core/models.py`** — modelos de dados base — status: aberta, pronta para despachar
-3. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
-4. `plugins/extractors/base.py` + `PyMuPDFExtractor` (com testes)
+2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
+3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — próxima OS a abrir
+4. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
 5. `plugins/speakers/base.py` + `KokoroSpeaker` (com testes, sem chamar engine real em CI)
 6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
 7. `processing/cleaner.py` e `processing/chunker.py`
