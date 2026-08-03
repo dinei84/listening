@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-006 — TesseractOCR.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-007 — `core/pipeline.py`, orquestração síncrona mínima (ver `docs/os/OS-007-core-pipeline.md`). Também preenche `plugins/registry.py` e `core/config.py` pela primeira vez.
 
-**Próxima OS a abrir após OS-006:** a definir — candidato no backlog é `core/pipeline.py`.
+**Próxima OS a abrir após OS-007:** a definir — candidato no backlog é `processing/cleaner.py` + `processing/chunker.py`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -43,8 +43,9 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | Componente | Status | Última OS | Observações |
 |---|---|---|---|
 | `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
-| `core/pipeline.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
-| `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-003+ |
+| `core/pipeline.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-007 |
+| `core/config.py` | não iniciado | OS-001 | Stub vazio — implementação real é OS-007 |
+| `plugins/registry.py` | não iniciado | OS-001 | Stub vazio — primeira implementação real é OS-007 (2 extractors + 1 speaker já existem) |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
@@ -67,7 +68,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 4. **OS-004 — `plugins/speakers/base.py` + `KokoroSpeaker`** — status: concluída
 5. **OS-005 — Spike: heurística de confiança de OCR** (decisão #5) — status: concluída, heurística aprovada (decisão #9)
 6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: concluída
-7. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
+7. **OS-007 — `core/pipeline.py`** — orquestração síncrona mínima ligando extractor → speaker (+ preenche `plugins/registry.py` e `core/config.py`) — status: aberta, aguardando execução (ver `docs/os/OS-007-core-pipeline.md`)
 8. `processing/cleaner.py` e `processing/chunker.py`
 9. API mínima (`POST /books`, `GET /books/{id}/status`)
 10. Player web básico
