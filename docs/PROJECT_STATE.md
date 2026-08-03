@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-002 — Modelos de dados base (`core/models.py`).
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-003 — Extractor base + `PyMuPDFExtractor` (ver `docs/os/OS-003-pymupdf-extractor.md`).
 
-**Próxima OS a abrir:** OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`.
+**Próxima OS a abrir após OS-003:** a definir — candidatos no backlog (seção 5) são o spike de heurística de OCR ou `KokoroSpeaker`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -61,7 +61,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 1. **OS-001 — Bootstrap do repositório e instalação de dependências** — status: concluída
 2. **OS-002 — `core/models.py`** — modelos de dados base — status: concluída
-3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — próxima OS a abrir
+3. **OS-003 — `plugins/extractors/base.py` + `PyMuPDFExtractor`** — status: aberta, aguardando execução (ver `docs/os/OS-003-pymupdf-extractor.md`)
 4. Spike: definir heurística de confiança de OCR (decisão #5 pendente em `PROJECT_STATE.md` seção 3)
 5. `plugins/speakers/base.py` + `KokoroSpeaker` (com testes, sem chamar engine real em CI)
 6. `core/pipeline.py` — orquestração síncrona mínima ligando extractor → processor → speaker
@@ -73,7 +73,6 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
 - `tesseract` binary não instalado no sistema — `pytesseract` importa mas não executa sem o binário. Documentado no README.md do código.
 - Decisões #3, #4, #5 ainda em aberto (fila de jobs, banco de dados, heurística de fallback de OCR).
-- Branch padrão do repositório no GitHub ainda está como `os/001-bootstrap-setup` em vez de `main` (ficou assim porque foi a primeira branch enviada ao remoto) — trocar em Settings > Branches depois que o PR #1 for mergeado.
 
 ## 7. Como este arquivo deve ser mantido
 
