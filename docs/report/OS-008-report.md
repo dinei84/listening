@@ -20,7 +20,7 @@ Implementado `processing/cleaner.py` (`clean_text()` — remove headers/footers 
 - [x] Type hints e docstring de uma linha em toda função pública
 - [x] `PROJECT_STATE.md` atualizado (status dos componentes + seção 2)
 - [x] Relatório criado em `docs/report/OS-008-report.md`
-- [ ] PR aberto contra o branch principal, com título `[OS-008] processing/cleaner.py + processing/chunker.py` — a abrir na próxima etapa deste fluxo
+- [x] PR aberto contra o branch principal, com título `[OS-008] processing/cleaner.py + processing/chunker.py`
 
 ### DoD específico da OS (seção 4 de `docs/os/OS-008-cleaner-chunker.md`)
 
@@ -89,4 +89,4 @@ Nenhuma.
 
 ## 7. Link do PR
 
-A preencher após abertura do PR na próxima etapa.
+https://github.com/dinei84/listening/pull/6
