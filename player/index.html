@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audiobook Player</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>Audiobook Player</h1>
+
+    <section id="upload-section">
+      <h2>Enviar PDF</h2>
+      <form id="upload-form">
+        <input type="file" id="pdf-input" accept="application/pdf" required />
+        <button type="submit">Enviar</button>
+      </form>
+      <p id="upload-status"></p>
+    </section>
+
+    <section id="manual-section">
+      <h2>Abrir livro existente</h2>
+      <form id="manual-form">
+        <input type="text" id="book-id-input" placeholder="id do livro" />
+        <button type="submit">Abrir</button>
+      </form>
+    </section>
+
+    <section id="player-section" hidden>
+      <h2 id="player-title">Player</h2>
+      <p id="player-status"></p>
+
+      <p id="resume-banner" hidden>
+        Retomar de onde parou?
+        <button id="resume-btn" type="button">Retomar</button>
+        <button id="restart-btn" type="button">Começar do início</button>
+      </p>
+
+      <audio id="audio-player" controls></audio>
+
+      <div id="controls">
+        <button id="play-pause-btn" type="button">Play/Pause</button>
+        <label>
+          Velocidade:
+          <select id="speed-select">
+            <option value="1">1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <script src="app.js"></script>
+  </body>
+</html>
