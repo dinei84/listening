@@ -20,7 +20,7 @@ Implementado o contrato `JobQueue` (`plugins/queues/base.py`, copiado verbatim d
 - [x] Type hints e docstring de uma linha em toda função pública (exceção: `claim_next()` na classe base mantém o docstring multi-linha exatamente como especificado em `ARQUITETURA.md`, por ser cópia literal de um contrato já aprovado)
 - [x] `PROJECT_STATE.md` atualizado (status dos componentes + seção 2)
 - [x] Relatório criado em `docs/report/OS-011-report.md`
-- [ ] PR aberto contra o branch principal, com título `[OS-011] Contrato JobQueue + SQLiteJobQueue` — a abrir na próxima etapa deste fluxo
+- [x] PR aberto contra o branch principal, com título `[OS-011] Contrato JobQueue + SQLiteJobQueue`
 
 ### DoD específico da OS (seção 4 de `docs/os/OS-011-job-queue.md`)
 
@@ -97,4 +97,4 @@ Nenhuma. Um ponto que registro por transparência (não é um bloqueio, é uma d
 
 ## 7. Link do PR
 
-A preencher após abertura do PR na próxima etapa.
+https://github.com/dinei84/listening/pull/9
