@@ -72,6 +72,29 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     )
 
 
+def list_books(db_path: str | None = None) -> list[Book]:
+    """Devolve todos os livros persistidos, ordenados por created_at decrescente."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        rows = conn.execute(
+            "SELECT id, title, original_filename, status, created_at "
+            "FROM books ORDER BY created_at DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        Book(
+            id=row[0],
+            title=row[1],
+            original_filename=row[2],
+            status=row[3],
+            created_at=datetime.fromisoformat(row[4]),
+        )
+        for row in rows
+    ]
+
+
 def update_book_status(book_id: str, status: str, db_path: str | None = None) -> None:
     """Atualiza o status de um Book existente."""
     conn = sqlite3.connect(_resolve_path(db_path))

@@ -194,3 +194,27 @@ def test_get_book_audio_chunk_returns_404_for_unknown_sequence(
         response = client.get(f"/books/{book_id}/audio/999")
 
     assert response.status_code == 404
+
+
+def test_get_books_endpoint_returns_list_of_books(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        response = client.get("/books")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["id"] == book_id
+    assert body[0]["title"] == "book.pdf"
+    assert body[0]["status"] == "uploaded"
+    assert "created_at" in body[0]
+
+
+def test_get_books_endpoint_returns_empty_list_when_no_books(temp_paths):
+    with TestClient(app) as client:
+        response = client.get("/books")
+
+    assert response.status_code == 200
+    assert response.json() == []

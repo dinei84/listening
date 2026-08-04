@@ -38,6 +38,21 @@ async def create_book(file: UploadFile) -> dict[str, str]:
     return {"id": book_id, "status": book.status}
 
 
+@router.get("/books")
+async def list_books() -> list[dict[str, str]]:
+    """Devolve todos os livros persistidos, ordenados por criação decrescente. Lista vazia se nenhum livro."""
+    books = db.list_books()
+    return [
+        {
+            "id": book.id,
+            "title": book.title,
+            "status": book.status,
+            "created_at": book.created_at.isoformat(),
+        }
+        for book in books
+    ]
+
+
 @router.get("/books/{book_id}/status")
 async def get_book_status(book_id: str) -> dict[str, str]:
     """Devolve o status persistido de um Book. 404 se o id não existir."""
