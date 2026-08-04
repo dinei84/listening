@@ -47,27 +47,21 @@ def test_easyocr_supports_returns_false_for_corrupted_file():
 
 
 def test_easyocr_extract_returns_one_page_per_pdf_page(monkeypatch):
-    monkeypatch.setattr(
-        EasyOCRExtractor, "_get_reader", lambda self: _legible_reader()
-    )
+    monkeypatch.setattr(EasyOCRExtractor, "_get_reader", lambda self: _legible_reader())
     extractor = EasyOCRExtractor()
     pages = extractor.extract(_fixture("clear_text_pdf.pdf"))
     assert len(pages) == 1
 
 
 def test_easyocr_extract_sets_source_to_easyocr(monkeypatch):
-    monkeypatch.setattr(
-        EasyOCRExtractor, "_get_reader", lambda self: _legible_reader()
-    )
+    monkeypatch.setattr(EasyOCRExtractor, "_get_reader", lambda self: _legible_reader())
     extractor = EasyOCRExtractor()
     pages = extractor.extract(_fixture("clear_text_pdf.pdf"))
     assert all(p.source == "easyocr" for p in pages)
 
 
 def test_easyocr_extract_confidence_matches_formula_for_legible_text(monkeypatch):
-    monkeypatch.setattr(
-        EasyOCRExtractor, "_get_reader", lambda self: _legible_reader()
-    )
+    monkeypatch.setattr(EasyOCRExtractor, "_get_reader", lambda self: _legible_reader())
     extractor = EasyOCRExtractor()
     pages = extractor.extract(_fixture("clear_text_pdf.pdf"))
     page = pages[0]
