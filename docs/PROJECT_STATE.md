@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-016 concluída — `player/index.html`/`player/app.js` ganharam uma seção "Meus livros": busca `GET /books` ao carregar a página, lista `title`/`status`/`created_at`, abre o livro clicado via `openBook()` já existente, botão "Atualizar lista", e se atualiza sozinha após upload. Campo manual de `book_id` mantido. Verificação manual em navegador real feita na revisão pós-entrega — dois livros reais processados pelo worker apareceram na lista, clique abriu e tocou o áudio até o fim, botão de atualizar disparou nova chamada `GET /books`, e upload simulado via `DataTransfer`+`requestSubmit()` (mesmo caminho de código do formulário real) atualizou a lista sozinha. Detalhes em `docs/report/OS-016-report.md` seção 6.1.
+**Fase:** OS-017 concluída — `plugins/extractors/easyocr_extractor.py` implementa `EasyOCRExtractor` (terceiro elo da cadeia de OCR, decisão #13), registrado em `plugins/registry.py` (`EXTRACTORS["easyocr"]`) e `easyocr==1.7.2` em `requirements.txt`. **Achado importante da validação empírica exigida pela OS (rodando o EasyOCR de verdade, não mockado):** no fixture "legível" (`clear_text_pdf.pdf`), a confiança real observada foi `0.7644` — **abaixo** do threshold `0.85` reaproveitado por analogia na decisão #13. Ou seja, aplicando a heurística de fallback (decisão #9) literalmente, esse texto legível cairia para o próximo elo da cadeia (`CloudOCRFallback`) mesmo tendo sido lido corretamente. Ver seção 6 para detalhes e a recomendação registrada (não é uma decisão de arquitetura tomada por este agente).
 
-**Última OS concluída:** OS-016 — liga a listagem de livros na UI do player.
+**Última OS concluída:** OS-017 — `EasyOCRExtractor`.
 
-**OS em andamento:** OS-017 — `plugins/extractors/easyocr_extractor.py` (terceiro elo da cadeia de OCR, decisão #13 — substitui PaddleOCR original) (ver `docs/os/OS-017-easyocr-extractor.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-017:** a definir — candidato natural é ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py` (hoje só conhece pymupdf→tesseract, 2 elos).
+**Próxima OS a abrir:** a definir — candidatos: (a) revisitar o threshold `0.85` para `EasyOCRExtractor` à luz do achado empírico desta OS, antes de (b) ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py` (hoje só conhece pymupdf→tesseract, 2 elos) — ligar com um threshold não calibrado arriscaria descartar boas extrações do EasyOCR sistematicamente.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -53,7 +53,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
-| `plugins/extractors/easyocr_extractor.py` | não iniciado | — | Terceiro elo da cadeia de OCR (decisão #13, substitui PaddleOCR do roadmap original) — implementação real é OS-017 |
+| `plugins/extractors/easyocr_extractor.py` | concluído (testado) | OS-017 | `EasyOCRExtractor` — terceiro elo da cadeia de OCR (decisão #13). `_get_reader()` lazy (mesmo padrão de `KokoroSpeaker._get_pipeline`), mockado por completo nos testes automatizados. Validação empírica real (fora dos testes) encontrou confiança `0.7644` para texto legível — abaixo do threshold `0.85` reaproveitado da decisão #9/#13; ver seção 6 e `docs/report/OS-017-report.md` |
 | `plugins/speakers/base.py` | concluído (testado) | OS-004 | Classe abstrata `Speaker` com `synthesize()` e `cost_per_char` |
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
@@ -85,8 +85,9 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-014-player-web-basico.md` e `docs/report/OS-014-report.md` seção 6.1)
 15. **OS-015 — `GET /books` (listagem)** — status: concluída
 16. **OS-016 — Liga a listagem de livros na UI do player** — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-016-listagem-no-player.md` e `docs/report/OS-016-report.md` seção 6.1)
-17. **OS-017 — `plugins/extractors/easyocr_extractor.py`** (terceiro elo da cadeia de OCR, decisão #13) — status: aberta, aguardando execução (ver `docs/os/OS-017-easyocr-extractor.md`)
-18. Ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py`
+17. **OS-017 — `plugins/extractors/easyocr_extractor.py`** (terceiro elo da cadeia de OCR, decisão #13) — status: concluída, com achado empírico sobre o threshold `0.85` (ver seção 6 e `docs/report/OS-017-report.md`)
+18. Revisitar o threshold de confiança `0.85` especificamente para `EasyOCRExtractor`, à luz do achado da OS-017 — recomendado antes do item 19
+19. Ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py`
 
 ## 6. Riscos e bloqueios conhecidos
 
@@ -94,7 +95,8 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 - Nova ferramenta de dev: `.claude/launch.json` configurado para subir a API (`uvicorn api.main:app`) via preview do navegador em sessões futuras. Lembrar de também rodar `python -m worker.tasks` numa janela separada para o processamento acontecer de verdade.
 - Decisão #3 (fila de jobs) resolvida na decisão #11: `SQLiteJobQueue` como plugin, contrato pronto para trocar para Redis depois sem reescrever pipeline/API/worker.
 - Achado na revisão pré-OS-013 (`worker/tasks.py` descartava o retorno de `synthesize_text()`, nenhum `AudioChunk` persistido) — corrigido pela OS-013: `worker/tasks.py` agora chama `storage.audio_store.persist_chunks()` antes de marcar o `Book` como `ready`.
-- Decisão #13: o terceiro extractor da cadeia de OCR passa a ser `EasyOCRExtractor` (reaproveita o `torch` já instalado via Kokoro), não `PaddleOCR` (~195MB de `paddlepaddle`, framework novo). A fórmula de confidence reaproveita o threshold `0.85` por analogia ao Tesseract, sem validação empírica própria ainda — validar quando `EasyOCRExtractor` ganhar OS própria e tiver uso real.
+- Decisão #13: o terceiro extractor da cadeia de OCR passa a ser `EasyOCRExtractor` (reaproveita o `torch` já instalado via Kokoro), não `PaddleOCR` (~195MB de `paddlepaddle`, framework novo). A fórmula de confidence reaproveita o threshold `0.85` por analogia ao Tesseract.
+- **Em aberto (achado da OS-017):** validação empírica real do `EasyOCRExtractor` (2 fixtures, `docs/report/OS-017-report.md`) mostrou confiança `0.7644` para o fixture "legível" (`clear_text_pdf.pdf`) — **abaixo** do threshold `0.85` reaproveitado da decisão #9. O texto foi lido corretamente (`"THE QUICK BROWN FOX JUMPS OVER 13 LAZY De"`), mas uma região específica ("De", provavelmente leitura parcial de uma palavra final) teve confiança `0.49`, puxando a média das 3 regiões para baixo. Aplicado literalmente, o threshold atual faria esse texto legível cair desnecessariamente para `CloudOCRFallback`. Fixture "ilegível" (`unreadable_text_pdf.pdf`) teve confiança real `~0.0000152` (não exatamente `0.0`, mas na prática equivalente — ainda bem abaixo do threshold). Este agente não decidiu um novo threshold (não é decisão de arquitetura de agente de execução, ver `AGENTS.md` seção 1) — recomendação registrada no relatório para o dono do projeto avaliar antes de ligar `EasyOCRExtractor` em `core/pipeline.py`.
 - Threshold `0.85` (decisão #9) é uma margem de segurança, não um ponto fino validado empiricamente — as fixtures do spike não cobriram degradação intermediária. Se `TesseractOCR` em produção mostrar falsos positivos/negativos de fallback, revisitar com mais dados.
 
 ## 7. Como este arquivo deve ser mantido
