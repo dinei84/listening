@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-009 — liga cleaner/chunker em core/pipeline.py.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-010 — API mínima, `POST /books` + `GET /books/{id}/status`, síncrona, com SQLite (ver `docs/os/OS-010-api-minima.md`).
 
-**Próxima OS a abrir:** a definir — candidato no backlog é a API mínima.
+**Próxima OS a abrir após OS-010:** a definir — candidato no backlog é o player web básico.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -35,6 +35,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | 7 | 2026-08-03 | Estrutura de documentação do repositório de código usa `docs/os/` e `docs/report/` em minúsculo (não `docs/OS/`/`docs/REPORT/`) | Encontrada divergência de caixa entre o que a governança definia e o que existia no repo de código; corrigido por renomeação para bater com a convenção documentada em `README.md` |
 | 8 | 2026-08-03 | Proposta (OS-005): considerar OCR "confiança baixa" quando `avg_confidence_words_normalized < 0.85` **ou** `words_counted == 0`; nesses casos, cair para o próximo extractor da cadeia (`TesseractOCR` → `PaddleOCR` → `CloudOCRFallback`) | Spike empírico com Tesseract 5.3.4 em 4 fixtures mostrou cenários de alta confiança (~0.90-0.96) e falha total (`words_counted == 0`, confiança 0.0) em imagem muito degradada. PaddleOCR confidence pesquisado em documentação oficial (`rec_score` / `rec_scores`) mas **não validado empiricamente** neste ambiente |
 | 9 | 2026-08-03 | **Decisão #8 aprovada pelo dono do projeto, sem alterações.** A heurística `avg_confidence_words_normalized < 0.85` ou `words_counted == 0` é agora oficial e foi incorporada em `ARQUITETURA.md` seção 4.1. Isso resolve a decisão #5 | Aprovação explícita em conversa, após revisão que confirmou a reprodutibilidade dos números do spike. Ressalva conhecida (não invalida a aprovação): as fixtures usadas cobriram bem sucesso (~0.90-0.96) e falha total (0.0), mas não um caso de degradação intermediária — `0.85` é uma margem de segurança, não um ponto fino validado empiricamente |
+| 10 | 2026-08-03 | **Decisão #4 confirmada: SQLite para a API mínima (OS-010), processamento síncrono no request (sem fila).** A decisão #3 (Celery/Redis vs. algo mais simples) continua em aberto — só passa a importar quando a API precisar mesmo ser assíncrona | Confirmado pelo dono do projeto. Segue o roadmap de `ARQUITETURA.md` seção 8, que já colocava a API (passo 2) antes da fila assíncrona (passo 4). Evita resolver a decisão #3 antes da hora, mantendo a filosofia de baixa infraestrutura do `HANDOFF.md` |
 
 > Toda OS que tomar uma decisão de arquitetura nova ou alterar uma decisão existente deve atualizar esta tabela.
 
@@ -53,9 +54,9 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
 | `processing/chunker.py` | concluído (testado) | OS-008 | `chunk_text(text, max_chars=1000)` divide por sentença via `re`, nunca corta sentença ao meio (sentença isolada maior que `max_chars` vira chunk próprio) |
-| `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
-| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — implementação real é OS-005+ |
-| `storage/` | não iniciado | OS-001 | Stubs vazios — implementação real é OS-005+ |
+| `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-010 |
+| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — aguarda decisão #3 (fila assíncrona) |
+| `storage/` | não iniciado | OS-001 | Stubs vazios — `db.py` ganha implementação real na OS-010; `audio_store.py` fica para depois |
 | `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
@@ -71,12 +72,12 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 7. **OS-007 — `core/pipeline.py`** — orquestração síncrona mínima ligando extractor → speaker (+ preenche `plugins/registry.py` e `core/config.py`) — status: concluída
 8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
 9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: concluída
-10. API mínima (`POST /books`, `GET /books/{id}/status`)
+10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: aberta, aguardando execução (ver `docs/os/OS-010-api-minima.md`)
 11. Player web básico
 
 ## 6. Riscos e bloqueios conhecidos
 
-- Decisões #3 e #4 ainda em aberto (fila de jobs e banco de dados).
+- Decisão #3 ainda em aberto (fila de jobs) — decisão #4 (banco de dados) confirmada como SQLite na OS-010.
 - Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike — validar quando `PaddleOCR` ganhar OS própria.
 - Threshold `0.85` (decisão #9) é uma margem de segurança, não um ponto fino validado empiricamente — as fixtures do spike não cobriram degradação intermediária. Se `TesseractOCR` em produção mostrar falsos positivos/negativos de fallback, revisitar com mais dados.
 
