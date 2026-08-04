@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-011 — contrato JobQueue + SQLiteJobQueue.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-012 — liga `JobQueue` em `worker/tasks.py` e muda `POST /books` para enfileirar (ver `docs/os/OS-012-worker-async-books.md`).
 
-**Próxima OS a abrir:** ligar `JobQueue` em `worker/tasks.py` e na API (`POST /books` passa a enfileirar).
+**Próxima OS a abrir após OS-012:** a definir — candidato no backlog é o player web básico.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -58,7 +58,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `api/` (FastAPI) | concluído (testado) | OS-010 | `api/main.py` (app + lifespan que roda `db.init_db()`) e `api/routes_books.py` (`POST /books`, `GET /books/{id}/status`) — pipeline síncrono no request, falha vira `status="error"` sem 500 |
 | `plugins/queues/base.py` | concluído (testado) | OS-011 | `JobQueue` (ABC) — `enqueue`, `claim_next`, `mark_done`, `mark_failed`, `get_job`, copiado verbatim de `ARQUITETURA.md` seção 4.3 |
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
-| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — `JobQueue`/`SQLiteJobQueue` prontos (OS-011), mas ainda não consumidos; implementação real é a próxima OS |
+| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — `JobQueue`/`SQLiteJobQueue` prontos (OS-011), mas ainda não consumidos; implementação real é OS-012 |
 | `storage/` | em andamento | OS-011 | `db.py` concluído (testado, OS-010) — `sqlite3` puro, tabela `books`; tabela `jobs` de `plugins/queues/sqlite_queue.py` vive no mesmo arquivo; `audio_store.py` continua stub vazio |
 | `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
@@ -77,7 +77,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: concluída
 10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: concluída
 11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: concluída
-12. Ligar `JobQueue` em `worker/tasks.py` e mudar `POST /books` para enfileirar em vez de processar inline
+12. **OS-012 — Liga `JobQueue` em `worker/tasks.py` e na API** — `POST /books` passa a enfileirar em vez de processar inline — status: aberta, aguardando execução (ver `docs/os/OS-012-worker-async-books.md`)
 13. Player web básico
 
 ## 6. Riscos e bloqueios conhecidos
