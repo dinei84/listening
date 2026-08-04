@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-013 concluída — `storage/audio_store.py` persiste os `AudioChunk` que o pipeline gera: move o arquivo do local temporário do Speaker para `storage/audio/{book_id}/{sequence}.wav` e grava os metadados numa tabela `audio_chunks` própria (mesmo arquivo `books.db`). `worker/tasks.py` agora captura o retorno de `synthesize_text()` (antes descartado) e persiste antes de marcar o `Book` como `ready`. Novo `api/routes_audio.py` expõe `GET /books/{id}/audio` (lista ordenada) e `GET /books/{id}/audio/{sequence}` (serve os bytes). 8 testes novos (77 no total do projeto).
+**Fase:** OS-014 concluída — player web básico (`player/`, HTML/CSS/JS puro, sem build step, decisão #12): upload, polling de status, playback sequencial automático dos chunks, play/pause, controle de velocidade (4 opções) e retomar posição via `localStorage`. `api/main.py` monta `player/` como estático na raiz. Verificação manual em navegador real feita na revisão pós-entrega (upload via `curl` — diálogo nativo de arquivo não é automatizável pela ferramenta de navegador — mas todo o resto do fluxo observado rodando de verdade: status, playback automático, play/pause, velocidade, retomar posição, tudo com worker/Kokoro/Tesseract reais, sem mock). Detalhes em `docs/report/OS-014-report.md` seção 6.1.
 
-**Última OS concluída:** OS-013 — storage/audio_store.py + servir áudio pela API.
+**Última OS concluída:** OS-014 — player web básico.
 
-**OS em andamento:** OS-014 — player web básico, HTML/CSS/JS puro sem build step (ver `docs/os/OS-014-player-web-basico.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-014:** a definir — candidato natural é `GET /books` (listagem), hoje inexistente e explicitamente fora do escopo da OS-014.
+**Próxima OS a abrir:** a definir — candidato natural é `GET /books` (listagem), hoje inexistente e explicitamente fora do escopo da OS-014.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -61,7 +61,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
 | `worker/tasks.py` | concluído (testado) | OS-013 | `process_job(job)` roda o pipeline, persiste os `AudioChunk` via `storage.audio_store.persist_chunks()` e marca `Book`/`Job` como `ready`/`done` ou `error`/`failed`; `run_worker(poll_interval, max_iterations)` faz polling; `python -m worker.tasks` para rodar manualmente |
 | `storage/` | em andamento | OS-013 | `db.py` (OS-010), `uploads.py` (OS-012) e `audio_store.py` (OS-013 — `persist_chunks`/`list_chunks`/`get_chunk`, tabela `audio_chunks` no mesmo `books.db`, arquivos em `storage/audio/{book_id}/{sequence}.wav`) concluídos e testados; tabela `jobs` de `plugins/queues/sqlite_queue.py` também no mesmo arquivo |
-| `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-014, HTML/CSS/JS puro (decisão #12) |
+| `player/` (frontend) | concluído (testado) | OS-014 | HTML/CSS/JS puro (decisão #12): upload, polling, playback sequencial, play/pause, velocidade, resume via `localStorage`. Servido por `api/main.py` (`StaticFiles` em `/`). `test_player_static_files_are_served` passa; verificação manual em navegador real feita na revisão (ver `docs/report/OS-014-report.md` seção 6.1) |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
@@ -80,10 +80,12 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: concluída
 12. **OS-012 — Liga `JobQueue` em `worker/tasks.py` e na API** — `POST /books` passa a enfileirar em vez de processar inline — status: concluída
 13. **OS-013 — `storage/audio_store.py` + servir áudio pela API** — status: concluída
-14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: aberta, aguardando execução (ver `docs/os/OS-014-player-web-basico.md`)
+14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-014-player-web-basico.md` e `docs/report/OS-014-report.md` seção 6.1)
 
 ## 6. Riscos e bloqueios conhecidos
 
+- **Resolvido:** a verificação manual em navegador exigida pelo DoD da OS-014 (upload → polling → playback automático em sequência → troca de velocidade → reload → retomada de posição) foi concluída na revisão pós-entrega, com acesso a navegador real. Único item não exercitado fim a fim: o clique no seletor nativo de arquivo do SO (barreira de segurança do próprio browser, não do player) — o endpoint que ele chama foi validado via `curl` e o código revisado. Detalhes em `docs/report/OS-014-report.md` seção 6.1.
+- Nova ferramenta de dev: `.claude/launch.json` configurado para subir a API (`uvicorn api.main:app`) via preview do navegador em sessões futuras. Lembrar de também rodar `python -m worker.tasks` numa janela separada para o processamento acontecer de verdade.
 - Decisão #3 (fila de jobs) resolvida na decisão #11: `SQLiteJobQueue` como plugin, contrato pronto para trocar para Redis depois sem reescrever pipeline/API/worker.
 - Achado na revisão pré-OS-013 (`worker/tasks.py` descartava o retorno de `synthesize_text()`, nenhum `AudioChunk` persistido) — corrigido pela OS-013: `worker/tasks.py` agora chama `storage.audio_store.persist_chunks()` antes de marcar o `Book` como `ready`.
 - Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike — validar quando `PaddleOCR` ganhar OS própria.
