@@ -5,13 +5,17 @@ from core.models import Book
 from storage import db
 
 
-def _book(book_id: str = "book-1", status: str = "uploaded") -> Book:
+def _book(
+    book_id: str = "book-1",
+    status: str = "uploaded",
+    created_at: datetime = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+) -> Book:
     return Book(
         id=book_id,
         title="Test Book",
         original_filename="test.pdf",
         status=status,
-        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+        created_at=created_at,
     )
 
 
@@ -55,3 +59,31 @@ def test_db_update_book_status(tmp_path):
     fetched = db.get_book(book.id, db_path)
 
     assert fetched.status == "ready"
+
+
+def test_list_books_returns_empty_list_when_no_books(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    db.init_db(db_path)
+
+    books = db.list_books(db_path)
+
+    assert books == []
+
+
+def test_list_books_returns_books_ordered_by_created_at_desc(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    db.init_db(db_path)
+    older = _book(
+        book_id="book-older",
+        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+    )
+    newer = _book(
+        book_id="book-newer",
+        created_at=datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC),
+    )
+    db.create_book(older, db_path)
+    db.create_book(newer, db_path)
+
+    books = db.list_books(db_path)
+
+    assert [book.id for book in books] == ["book-newer", "book-older"]
