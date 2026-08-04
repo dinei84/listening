@@ -1,25 +1,23 @@
 import shutil
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
-from core import pipeline
-from core.models import Book, Chapter
-from storage import db
+from core import config as config_module
+from core.models import Book, Job
+from plugins import registry as registry_module
+from storage import db, uploads
 
 router = APIRouter()
-
-UPLOAD_DIR = Path("uploads")
 
 
 @router.post("/books")
 async def create_book(file: UploadFile) -> dict[str, str]:
-    """Recebe um PDF, roda o pipeline síncrono (extração → limpeza → síntese) e devolve o id e o status final do Book."""
+    """Recebe um PDF, salva em disco, cria o Book e enfileira um Job de processamento assíncrono."""
     book_id = str(uuid.uuid4())
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    pdf_path = UPLOAD_DIR / f"{book_id}.pdf"
+    uploads.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    pdf_path = uploads.pdf_path_for(book_id)
     with pdf_path.open("wb") as destination:
         shutil.copyfileobj(file.file, destination)
 
@@ -32,18 +30,12 @@ async def create_book(file: UploadFile) -> dict[str, str]:
     )
     db.create_book(book)
 
-    try:
-        text = pipeline.extract_clean_text(str(pdf_path))
-        chapter = Chapter(id=str(uuid.uuid4()), title=book.title, order=0, text=text)
-        pipeline.synthesize_text(text, chapter_id=chapter.id)
-        status = "ready"
-    # Captura ampla intencional: qualquer falha do pipeline vira status "error",
-    # nunca um 500 não tratado — requisito da OS-010.
-    except Exception:  # noqa: BLE001
-        status = "error"
+    cfg = config_module.load_config()
+    queue = registry_module.QUEUES[cfg.queue]()
+    job = Job(id=str(uuid.uuid4()), book_id=book_id, stage="process", status="queued")
+    queue.enqueue(job)
 
-    db.update_book_status(book_id, status)
-    return {"id": book_id, "status": status}
+    return {"id": book_id, "status": book.status}
 
 
 @router.get("/books/{book_id}/status")
