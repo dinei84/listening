@@ -17,10 +17,11 @@ __pycache__/
 !tests/fixtures/**/*.mp3
 !tests/fixtures/**/*.wav
 
-# Banco de dados SQLite local e PDFs recebidos pela API (dado de runtime, não versionado)
+# Banco de dados SQLite local, PDFs recebidos e áudio gerado pela API (dado de runtime, não versionado)
 books.db
 *.db
 uploads/
+storage/audio/
 
 # IDEs
 .vscode/

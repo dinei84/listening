@@ -4,7 +4,7 @@ from core import config as config_module
 from core import pipeline
 from core.models import Chapter, Job
 from plugins import registry as registry_module
-from storage import db, uploads
+from storage import audio_store, db, uploads
 
 
 def process_job(job: Job) -> None:
@@ -22,7 +22,8 @@ def process_job(job: Job) -> None:
     try:
         text = pipeline.extract_clean_text(str(pdf_path))
         chapter = Chapter(id=job.id, title=book.title, order=0, text=text)
-        pipeline.synthesize_text(text, chapter_id=chapter.id)
+        audio_chunks = pipeline.synthesize_text(text, chapter_id=chapter.id)
+        audio_store.persist_chunks(job.book_id, audio_chunks)
         db.update_book_status(job.book_id, "ready")
         queue.mark_done(job.id)
     # Captura ampla intencional: mesmo motivo da OS-010 (rota /books) — qualquer
