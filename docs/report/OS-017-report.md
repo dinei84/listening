@@ -116,4 +116,4 @@ Nenhum bloqueio para fechar esta OS — a implementação está completa e testa
 
 ## 8. Link do PR
 
-[a preencher após abertura do PR]
+https://github.com/dinei84/listening/pull/15
