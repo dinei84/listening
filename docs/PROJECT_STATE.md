@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-010 concluída — API mínima FastAPI (`POST /books`, `GET /books/{id}/status`) rodando o pipeline síncrono no próprio request, com persistência em SQLite puro (stdlib `sqlite3`, sem ORM) via `storage/db.py`. Falhas do pipeline viram `status="error"` sem 500 não tratado. 7 testes novos (54 no total do projeto).
+**Fase:** OS-011 concluída — contrato `JobQueue` (ABC com `enqueue`/`claim_next`/`mark_done`/`mark_failed`/`get_job`) e `SQLiteJobQueue`, com `claim_next()` atomicamente seguro (transação `BEGIN IMMEDIATE`, testado com reivindicação dupla). `plugins/registry.py` ganhou `QUEUES`, `core/config.py`/`config.yaml` ganharam `queue: sqlite`. Fila ainda não está ligada em `worker/tasks.py` nem em `POST /books` — isso é a próxima OS. 10 testes novos (64 no total do projeto).
 
-**Última OS concluída:** OS-010 — API mínima.
+**Última OS concluída:** OS-011 — contrato JobQueue + SQLiteJobQueue.
 
-**OS em andamento:** OS-011 — contrato `JobQueue` + `SQLiteJobQueue` (ver `docs/os/OS-011-job-queue.md`). Ligar isso em `worker/tasks.py` e mudar `POST /books` para enfileirar em vez de processar inline fica para a OS seguinte.
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-011:** ligar `JobQueue` em `worker/tasks.py` e na API (`POST /books` passa a enfileirar).
+**Próxima OS a abrir:** ligar `JobQueue` em `worker/tasks.py` e na API (`POST /books` passa a enfileirar).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -46,8 +46,8 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 |---|---|---|---|
 | `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
 | `core/pipeline.py` | concluído (testado) | OS-009 | `extract_with_fallback()`, `extract_clean_text()` (extração + `clean_text()`) e `synthesize_text(text, chapter_id, max_chars=None)` — chama o Speaker uma vez por chunk (`chunk_text()`), `sequence` incremental, `chapter_id` em todos, texto vazio não chama o Speaker |
-| `core/config.py` | concluído (testado) | OS-007 | `load_config()` lê `config.yaml` e retorna `Config(extractor, speaker)` |
-| `plugins/registry.py` | concluído (testado) | OS-007 | `EXTRACTORS = {"pymupdf", "tesseract"}`, `SPEAKERS = {"kokoro"}`, conforme `ARQUITETURA.md` seção 4.4 (ganha `QUEUES` na OS-011) |
+| `core/config.py` | concluído (testado) | OS-011 | `load_config()` lê `config.yaml` e retorna `Config(extractor, speaker, queue)` |
+| `plugins/registry.py` | concluído (testado) | OS-011 | `EXTRACTORS = {"pymupdf", "tesseract"}`, `SPEAKERS = {"kokoro"}`, `QUEUES = {"sqlite": SQLiteJobQueue}`, conforme `ARQUITETURA.md` seção 4.4 |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
@@ -56,10 +56,10 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
 | `processing/chunker.py` | concluído (testado) | OS-008 | `chunk_text(text, max_chars=1000)` divide por sentença via `re`, nunca corta sentença ao meio (sentença isolada maior que `max_chars` vira chunk próprio) |
 | `api/` (FastAPI) | concluído (testado) | OS-010 | `api/main.py` (app + lifespan que roda `db.init_db()`) e `api/routes_books.py` (`POST /books`, `GET /books/{id}/status`) — pipeline síncrono no request, falha vira `status="error"` sem 500 |
-| `plugins/queues/base.py` | não iniciado | — | Contrato `JobQueue` definido em `ARQUITETURA.md` seção 4.3 (decisão #11) — implementação real é OS-011 |
-| `plugins/queues/sqlite_queue.py` | não iniciado | — | Stub — implementação real é OS-011 |
-| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — decisão #3 resolvida (decisão #11); implementação real vem depois da OS-011 (contrato) |
-| `storage/` | em andamento | OS-010 | `db.py` concluído (testado) — `sqlite3` puro, tabela `books`; `audio_store.py` continua stub vazio, fica para depois |
+| `plugins/queues/base.py` | concluído (testado) | OS-011 | `JobQueue` (ABC) — `enqueue`, `claim_next`, `mark_done`, `mark_failed`, `get_job`, copiado verbatim de `ARQUITETURA.md` seção 4.3 |
+| `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
+| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — `JobQueue`/`SQLiteJobQueue` prontos (OS-011), mas ainda não consumidos; implementação real é a próxima OS |
+| `storage/` | em andamento | OS-011 | `db.py` concluído (testado, OS-010) — `sqlite3` puro, tabela `books`; tabela `jobs` de `plugins/queues/sqlite_queue.py` vive no mesmo arquivo; `audio_store.py` continua stub vazio |
 | `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
@@ -76,7 +76,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
 9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: concluída
 10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: concluída
-11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: aberta, aguardando execução (ver `docs/os/OS-011-job-queue.md`)
+11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: concluída
 12. Ligar `JobQueue` em `worker/tasks.py` e mudar `POST /books` para enfileirar em vez de processar inline
 13. Player web básico
 
