@@ -60,7 +60,7 @@ audiobook/
 ├── storage/
 │   ├── audio_store.py      # salvar/ler arquivos de áudio
 │   └── db.py                # metadados (SQLite/Postgres)
-├── player/                  # frontend web (React)
+├── player/                  # frontend web (HTML/CSS/JS puro, sem build step — decisão #12)
 ├── tests/
 ├── config.yaml
 └── ARQUITETURA.md           # este arquivo

@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-013 — storage/audio_store.py + servir áudio pela API.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-014 — player web básico, HTML/CSS/JS puro sem build step (ver `docs/os/OS-014-player-web-basico.md`).
 
-**Próxima OS a abrir:** o player web básico (HTML/JS consumindo os endpoints de áudio).
+**Próxima OS a abrir após OS-014:** a definir — candidato natural é `GET /books` (listagem), hoje inexistente e explicitamente fora do escopo da OS-014.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -37,6 +37,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | 9 | 2026-08-03 | **Decisão #8 aprovada pelo dono do projeto, sem alterações.** A heurística `avg_confidence_words_normalized < 0.85` ou `words_counted == 0` é agora oficial e foi incorporada em `ARQUITETURA.md` seção 4.1. Isso resolve a decisão #5 | Aprovação explícita em conversa, após revisão que confirmou a reprodutibilidade dos números do spike. Ressalva conhecida (não invalida a aprovação): as fixtures usadas cobriram bem sucesso (~0.90-0.96) e falha total (0.0), mas não um caso de degradação intermediária — `0.85` é uma margem de segurança, não um ponto fino validado empiricamente |
 | 10 | 2026-08-03 | **Decisão #4 confirmada: SQLite para a API mínima (OS-010), processamento síncrono no request (sem fila).** A decisão #3 (Celery/Redis vs. algo mais simples) continua em aberto — só passa a importar quando a API precisar mesmo ser assíncrona | Confirmado pelo dono do projeto. Segue o roadmap de `ARQUITETURA.md` seção 8, que já colocava a API (passo 2) antes da fila assíncrona (passo 4). Evita resolver a decisão #3 antes da hora, mantendo a filosofia de baixa infraestrutura do `HANDOFF.md` |
 | 11 | 2026-08-03 | **Decisão #3 resolvida: fila de jobs em SQLite (`SQLiteJobQueue`), tratada como plugin.** Contrato `JobQueue` novo, proposto e aprovado pelo dono do projeto, incorporado em `ARQUITETURA.md` seção 4.3. Celery+Redis fica descartado por agora, mas a interface já existe para que uma futura `RedisJobQueue` seja só uma nova classe + entrada no registry, sem reescrever `core/pipeline.py`/`api/`/`worker/tasks.py` | Segue a mesma regra de ouro de plugin já usada para Extractor/Speaker (`ARQUITETURA.md` seção 1: "pode ser substituído por algo melhor no futuro, é plugin"). Dono do projeto pediu explicitamente para não fechar a porta pra Redis mais tarde, sem adicionar a complexidade dele agora |
+| 12 | 2026-08-04 | **Player web em HTML/CSS/JS puro, sem build step (sem React).** `ARQUITETURA.md` seção 3 tinha "React" só como comentário informal na árvore de pastas original — nunca foi decisão formal. Atualizado para refletir a escolha real | Confirmado pelo dono do projeto. Mesma filosofia de baixa infraestrutura já aplicada o projeto inteiro (sem ORM, sem Celery, stdlib sempre que dá) — React exigiria npm/node_modules/bundler, uma segunda toolchain só pro player "básico" |
 
 > Toda OS que tomar uma decisão de arquitetura nova ou alterar uma decisão existente deve atualizar esta tabela.
 
@@ -60,7 +61,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
 | `worker/tasks.py` | concluído (testado) | OS-013 | `process_job(job)` roda o pipeline, persiste os `AudioChunk` via `storage.audio_store.persist_chunks()` e marca `Book`/`Job` como `ready`/`done` ou `error`/`failed`; `run_worker(poll_interval, max_iterations)` faz polling; `python -m worker.tasks` para rodar manualmente |
 | `storage/` | em andamento | OS-013 | `db.py` (OS-010), `uploads.py` (OS-012) e `audio_store.py` (OS-013 — `persist_chunks`/`list_chunks`/`get_chunk`, tabela `audio_chunks` no mesmo `books.db`, arquivos em `storage/audio/{book_id}/{sequence}.wav`) concluídos e testados; tabela `jobs` de `plugins/queues/sqlite_queue.py` também no mesmo arquivo |
-| `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
+| `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-014, HTML/CSS/JS puro (decisão #12) |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
@@ -79,7 +80,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: concluída
 12. **OS-012 — Liga `JobQueue` em `worker/tasks.py` e na API** — `POST /books` passa a enfileirar em vez de processar inline — status: concluída
 13. **OS-013 — `storage/audio_store.py` + servir áudio pela API** — status: concluída
-14. Player web básico (depende da OS-013)
+14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: aberta, aguardando execução (ver `docs/os/OS-014-player-web-basico.md`)
 
 ## 6. Riscos e bloqueios conhecidos
 
