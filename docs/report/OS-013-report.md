@@ -20,7 +20,7 @@
 - [x] Type hints e docstring de uma linha em toda função pública
 - [x] `PROJECT_STATE.md` atualizado (status dos componentes + seção 2 + seção 6)
 - [x] Relatório criado em `docs/report/OS-013-report.md`
-- [ ] PR aberto contra o branch principal, com título `[OS-013] storage/audio_store.py + servir áudio pela API` — a abrir na próxima etapa deste fluxo
+- [x] PR aberto contra o branch principal, com título `[OS-013] storage/audio_store.py + servir áudio pela API`
 
 ### DoD específico da OS (seção 4 de `docs/os/OS-013-audio-store.md`)
 
@@ -90,4 +90,4 @@ Nenhuma.
 
 ## 7. Link do PR
 
-A preencher após abertura do PR na próxima etapa.
+https://github.com/dinei84/listening/pull/11
