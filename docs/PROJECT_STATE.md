@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-008 concluída — `processing/cleaner.py` (remoção de headers/footers repetidos + correção de hifenização) e `processing/chunker.py` (chunking por sentença, `max_chars` configurável, nunca corta sentença ao meio) implementados e testados, usando só stdlib (`re`, `collections.Counter`). 9 testes passando (42 no total do projeto). Ainda não ligados a `core/pipeline.py` — fora do escopo desta OS.
+**Fase:** OS-009 concluída — `core/pipeline.py` agora limpa e faz chunking do texto antes de sintetizar: `extract_clean_text()` (extração + `clean_text()`) e `synthesize_text()` chamando o Speaker uma vez por chunk (`sequence` incremental, `chapter_id` em todos, texto vazio não chama o Speaker). 6 testes novos/atualizados (47 no total do projeto).
 
-**Última OS concluída:** OS-008 — processing/cleaner.py + processing/chunker.py.
+**Última OS concluída:** OS-009 — liga cleaner/chunker em core/pipeline.py.
 
-**OS em andamento:** OS-009 — ligar `processing/cleaner.py`/`processing/chunker.py` em `core/pipeline.py` (ver `docs/os/OS-009-pipeline-cleaner-chunker.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-009:** a definir — candidato no backlog é a API mínima.
+**Próxima OS a abrir:** a definir — candidato no backlog é a API mínima.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -43,7 +43,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | Componente | Status | Última OS | Observações |
 |---|---|---|---|
 | `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
-| `core/pipeline.py` | concluído (testado) | OS-007 | `extract_with_fallback()` (pymupdf → tesseract) e `synthesize_text()`, plugins resolvidos só por nome via registry/config. `synthesize_text()` ainda sintetiza o texto inteiro numa chamada só — OS-009 vai ligar `cleaner`/`chunker` |
+| `core/pipeline.py` | concluído (testado) | OS-009 | `extract_with_fallback()`, `extract_clean_text()` (extração + `clean_text()`) e `synthesize_text(text, chapter_id, max_chars=None)` — chama o Speaker uma vez por chunk (`chunk_text()`), `sequence` incremental, `chapter_id` em todos, texto vazio não chama o Speaker |
 | `core/config.py` | concluído (testado) | OS-007 | `load_config()` lê `config.yaml` e retorna `Config(extractor, speaker)` |
 | `plugins/registry.py` | concluído (testado) | OS-007 | `EXTRACTORS = {"pymupdf", "tesseract"}`, `SPEAKERS = {"kokoro"}`, conforme `ARQUITETURA.md` seção 4.3 |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
@@ -70,7 +70,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: concluída
 7. **OS-007 — `core/pipeline.py`** — orquestração síncrona mínima ligando extractor → speaker (+ preenche `plugins/registry.py` e `core/config.py`) — status: concluída
 8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
-9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: aberta, aguardando execução (ver `docs/os/OS-009-pipeline-cleaner-chunker.md`)
+9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: concluída
 10. API mínima (`POST /books`, `GET /books/{id}/status`)
 11. Player web básico
 
