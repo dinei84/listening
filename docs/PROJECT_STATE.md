@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-010 — API mínima.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-011 — contrato `JobQueue` + `SQLiteJobQueue` (ver `docs/os/OS-011-job-queue.md`). Ligar isso em `worker/tasks.py` e mudar `POST /books` para enfileirar em vez de processar inline fica para a OS seguinte.
 
-**Próxima OS a abrir:** a definir — candidato no backlog é o player web básico.
+**Próxima OS a abrir após OS-011:** ligar `JobQueue` em `worker/tasks.py` e na API (`POST /books` passa a enfileirar).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -36,6 +36,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | 8 | 2026-08-03 | Proposta (OS-005): considerar OCR "confiança baixa" quando `avg_confidence_words_normalized < 0.85` **ou** `words_counted == 0`; nesses casos, cair para o próximo extractor da cadeia (`TesseractOCR` → `PaddleOCR` → `CloudOCRFallback`) | Spike empírico com Tesseract 5.3.4 em 4 fixtures mostrou cenários de alta confiança (~0.90-0.96) e falha total (`words_counted == 0`, confiança 0.0) em imagem muito degradada. PaddleOCR confidence pesquisado em documentação oficial (`rec_score` / `rec_scores`) mas **não validado empiricamente** neste ambiente |
 | 9 | 2026-08-03 | **Decisão #8 aprovada pelo dono do projeto, sem alterações.** A heurística `avg_confidence_words_normalized < 0.85` ou `words_counted == 0` é agora oficial e foi incorporada em `ARQUITETURA.md` seção 4.1. Isso resolve a decisão #5 | Aprovação explícita em conversa, após revisão que confirmou a reprodutibilidade dos números do spike. Ressalva conhecida (não invalida a aprovação): as fixtures usadas cobriram bem sucesso (~0.90-0.96) e falha total (0.0), mas não um caso de degradação intermediária — `0.85` é uma margem de segurança, não um ponto fino validado empiricamente |
 | 10 | 2026-08-03 | **Decisão #4 confirmada: SQLite para a API mínima (OS-010), processamento síncrono no request (sem fila).** A decisão #3 (Celery/Redis vs. algo mais simples) continua em aberto — só passa a importar quando a API precisar mesmo ser assíncrona | Confirmado pelo dono do projeto. Segue o roadmap de `ARQUITETURA.md` seção 8, que já colocava a API (passo 2) antes da fila assíncrona (passo 4). Evita resolver a decisão #3 antes da hora, mantendo a filosofia de baixa infraestrutura do `HANDOFF.md` |
+| 11 | 2026-08-03 | **Decisão #3 resolvida: fila de jobs em SQLite (`SQLiteJobQueue`), tratada como plugin.** Contrato `JobQueue` novo, proposto e aprovado pelo dono do projeto, incorporado em `ARQUITETURA.md` seção 4.3. Celery+Redis fica descartado por agora, mas a interface já existe para que uma futura `RedisJobQueue` seja só uma nova classe + entrada no registry, sem reescrever `core/pipeline.py`/`api/`/`worker/tasks.py` | Segue a mesma regra de ouro de plugin já usada para Extractor/Speaker (`ARQUITETURA.md` seção 1: "pode ser substituído por algo melhor no futuro, é plugin"). Dono do projeto pediu explicitamente para não fechar a porta pra Redis mais tarde, sem adicionar a complexidade dele agora |
 
 > Toda OS que tomar uma decisão de arquitetura nova ou alterar uma decisão existente deve atualizar esta tabela.
 
@@ -46,7 +47,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
 | `core/pipeline.py` | concluído (testado) | OS-009 | `extract_with_fallback()`, `extract_clean_text()` (extração + `clean_text()`) e `synthesize_text(text, chapter_id, max_chars=None)` — chama o Speaker uma vez por chunk (`chunk_text()`), `sequence` incremental, `chapter_id` em todos, texto vazio não chama o Speaker |
 | `core/config.py` | concluído (testado) | OS-007 | `load_config()` lê `config.yaml` e retorna `Config(extractor, speaker)` |
-| `plugins/registry.py` | concluído (testado) | OS-007 | `EXTRACTORS = {"pymupdf", "tesseract"}`, `SPEAKERS = {"kokoro"}`, conforme `ARQUITETURA.md` seção 4.3 |
+| `plugins/registry.py` | concluído (testado) | OS-007 | `EXTRACTORS = {"pymupdf", "tesseract"}`, `SPEAKERS = {"kokoro"}`, conforme `ARQUITETURA.md` seção 4.4 (ganha `QUEUES` na OS-011) |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
@@ -55,7 +56,9 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
 | `processing/chunker.py` | concluído (testado) | OS-008 | `chunk_text(text, max_chars=1000)` divide por sentença via `re`, nunca corta sentença ao meio (sentença isolada maior que `max_chars` vira chunk próprio) |
 | `api/` (FastAPI) | concluído (testado) | OS-010 | `api/main.py` (app + lifespan que roda `db.init_db()`) e `api/routes_books.py` (`POST /books`, `GET /books/{id}/status`) — pipeline síncrono no request, falha vira `status="error"` sem 500 |
-| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — aguarda decisão #3 (fila assíncrona) |
+| `plugins/queues/base.py` | não iniciado | — | Contrato `JobQueue` definido em `ARQUITETURA.md` seção 4.3 (decisão #11) — implementação real é OS-011 |
+| `plugins/queues/sqlite_queue.py` | não iniciado | — | Stub — implementação real é OS-011 |
+| `worker/` (fila) | não iniciado | OS-001 | Stub vazio — decisão #3 resolvida (decisão #11); implementação real vem depois da OS-011 (contrato) |
 | `storage/` | em andamento | OS-010 | `db.py` concluído (testado) — `sqlite3` puro, tabela `books`; `audio_store.py` continua stub vazio, fica para depois |
 | `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
@@ -73,11 +76,13 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
 9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: concluída
 10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: concluída
-11. Player web básico
+11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: aberta, aguardando execução (ver `docs/os/OS-011-job-queue.md`)
+12. Ligar `JobQueue` em `worker/tasks.py` e mudar `POST /books` para enfileirar em vez de processar inline
+13. Player web básico
 
 ## 6. Riscos e bloqueios conhecidos
 
-- Decisão #3 ainda em aberto (fila de jobs) — decisão #4 (banco de dados) confirmada como SQLite na OS-010.
+- Decisão #3 (fila de jobs) resolvida na decisão #11: `SQLiteJobQueue` como plugin, contrato pronto para trocar para Redis depois sem reescrever pipeline/API/worker.
 - Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike — validar quando `PaddleOCR` ganhar OS própria.
 - Threshold `0.85` (decisão #9) é uma margem de segurança, não um ponto fino validado empiricamente — as fixtures do spike não cobriram degradação intermediária. Se `TesseractOCR` em produção mostrar falsos positivos/negativos de fallback, revisitar com mais dados.
 

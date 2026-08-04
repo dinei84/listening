@@ -42,6 +42,10 @@ audiobook/
 │   │   ├── kokoro_speaker.py
 │   │   ├── piper_speaker.py
 │   │   └── cloud_speaker.py   # OpenAI TTS / ElevenLabs / etc
+│   ├── queues/
+│   │   ├── base.py        # classe abstrata JobQueue
+│   │   ├── sqlite_queue.py    # SQLiteJobQueue — implementação padrão
+│   │   └── redis_queue.py     # futuro, quando/se houver necessidade real de escalar
 │   └── registry.py        # mapeia nome (string) → classe do plugin
 ├── processing/
 │   ├── cleaner.py         # remove headers/footers, hifenização
@@ -52,7 +56,7 @@ audiobook/
 │   ├── routes_books.py
 │   └── routes_jobs.py
 ├── worker/
-│   └── tasks.py            # jobs de fila (Celery/RQ)
+│   └── tasks.py            # loop de polling que consome a JobQueue configurada
 ├── storage/
 │   ├── audio_store.py      # salvar/ler arquivos de áudio
 │   └── db.py                # metadados (SQLite/Postgres)
@@ -122,7 +126,49 @@ class Speaker(ABC):
 
 Regra de decisão do pipeline: usar o Speaker definido em `config.yaml` como padrão (ex: `kokoro`). Só usar um Speaker cloud quando o usuário explicitamente pedir "voz premium" para aquele livro/capítulo.
 
-### 4.3 Registro de plugins
+### 4.3 JobQueue (fila de jobs)
+
+Decisão #3/#11 (`PROJECT_STATE.md`): fila de jobs é plugin, pelo mesmo motivo que Extractor/Speaker são — "pode ser substituído por algo melhor no futuro" (`ARQUITETURA.md` seção 1). Hoje só existe uma implementação (`SQLiteJobQueue`), mas o contrato já existe para que trocar para Redis/Celery no futuro seja escrever uma nova classe + registrar, não reescrever `core/pipeline.py`, `api/` ou `worker/tasks.py`.
+
+```python
+# plugins/queues/base.py
+from abc import ABC, abstractmethod
+from core.models import Job
+
+class JobQueue(ABC):
+    """Enfileira e processa Jobs de forma assíncrona."""
+
+    @abstractmethod
+    def enqueue(self, job: Job) -> None:
+        """Adiciona um Job à fila, status inicial 'queued'."""
+        ...
+
+    @abstractmethod
+    def claim_next(self) -> Job | None:
+        """Reivindica atomicamente o próximo Job 'queued', marcando como 'running'.
+        None se a fila estiver vazia. Deve ser seguro para múltiplos workers
+        chamando ao mesmo tempo — nenhum Job pode ser reivindicado duas vezes."""
+        ...
+
+    @abstractmethod
+    def mark_done(self, job_id: str) -> None:
+        """Marca um Job como concluído ('done')."""
+        ...
+
+    @abstractmethod
+    def mark_failed(self, job_id: str, error_message: str) -> None:
+        """Marca um Job como falho ('failed'), registrando a mensagem de erro."""
+        ...
+
+    @abstractmethod
+    def get_job(self, job_id: str) -> Job | None:
+        """Busca um Job pelo id. None se não existir."""
+        ...
+```
+
+Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, resolvida via `registry`/`config` (mesma regra da seção 4.4) — nunca importa `SQLiteJobQueue` diretamente.
+
+### 4.4 Registro de plugins
 
 ```python
 # plugins/registry.py
@@ -138,9 +184,14 @@ SPEAKERS = {
     "piper": PiperSpeaker,
     "cloud_tts": CloudSpeaker,
 }
+
+QUEUES = {
+    "sqlite": SQLiteJobQueue,
+    "redis": RedisJobQueue,   # futuro, quando/se houver necessidade real de escalar
+}
 ```
 
-Nenhum outro módulo deve importar uma classe concreta de plugin diretamente — sempre passar pelo registry. Isso garante que trocar de engine é uma mudança de config, não de código.
+Nenhum outro módulo deve importar uma classe concreta de plugin diretamente — sempre passar pelo registry. Isso garante que trocar de engine (incluindo a fila) é uma mudança de config, não de código.
 
 ---
 
