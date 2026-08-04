@@ -19,7 +19,7 @@ Adicionado `list_books()` em `storage/db.py` (todos os livros, ordenados por `cr
 - [x] Type hints e docstring de uma linha em `list_books()` e no handler `list_books` (rota)
 - [x] `PROJECT_STATE.md` atualizado (seções 2, 4 e 5)
 - [x] Relatório criado em `docs/report/OS-015-report.md`
-- [ ] PR aberto — a abrir na sequência deste relatório
+- [x] PR aberto (https://github.com/dinei84/listening/pull/13)
 
 **Específico da OS (`docs/os/OS-015-listagem-livros.md` seção 4):**
 - [x] `storage/db.py` tem `list_books()` que devolve todos os livros, ordenados por `created_at` decrescente
@@ -69,4 +69,4 @@ Nenhuma.
 
 ## 7. Link do PR
 
-[a preencher após abertura do PR]
+https://github.com/dinei84/listening/pull/13
