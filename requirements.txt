@@ -4,6 +4,7 @@ pytesseract==0.3.13
 kokoro==0.9.4
 soundfile==0.14.0
 fastapi==0.141.1
+python-multipart==0.0.32
 uvicorn==0.52.1
 pyyaml==6.0.3
 python-dotenv==1.2.2
