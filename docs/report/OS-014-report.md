@@ -20,7 +20,7 @@
 - [x] Type hints e docstring de uma linha em toda função pública Python tocada (`api/main.py`); não aplicável a `player/*.js` (JavaScript, sem convenção de type hints/docstring do projeto)
 - [x] `PROJECT_STATE.md` atualizado (status dos componentes + seção 2 + seção 6) — **marcado explicitamente como bloqueado, não como concluído**, refletindo a realidade (ver seção 6 deste relatório)
 - [x] Relatório criado em `docs/report/OS-014-report.md`
-- [ ] PR aberto contra o branch principal — será aberto como **draft**, não pronto para merge, até a verificação manual da seção 6 ser feita por alguém com acesso a navegador
+- [x] PR aberto contra o branch principal, como **draft** — não pronto para merge até a verificação manual da seção 6 ser feita por alguém com acesso a navegador
 
 ### DoD específico da OS (seção 4 de `docs/os/OS-014-player-web-basico.md`)
 
@@ -135,4 +135,4 @@ Seguindo `AGENTS.md` seção 6 ("não decidir sozinho... deixar o PR em rascunho
 
 ## 7. Link do PR
 
-A preencher após abertura do PR (draft) na próxima etapa.
+https://github.com/dinei84/listening/pull/12 (draft — ver seção 6)
