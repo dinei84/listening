@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-008 — processing/cleaner.py + processing/chunker.py.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-009 — ligar `processing/cleaner.py`/`processing/chunker.py` em `core/pipeline.py` (ver `docs/os/OS-009-pipeline-cleaner-chunker.md`).
 
-**Próxima OS a abrir:** a definir — candidatos são ligar cleaner/chunker em `core/pipeline.py`, ou API mínima.
+**Próxima OS a abrir após OS-009:** a definir — candidato no backlog é a API mínima.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -43,7 +43,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | Componente | Status | Última OS | Observações |
 |---|---|---|---|
 | `core/models.py` | concluído (testado) | OS-002 | 5 modelos Pydantic implementados com validações de status |
-| `core/pipeline.py` | concluído (testado) | OS-007 | `extract_with_fallback()` (pymupdf → tesseract) e `synthesize_text()`, plugins resolvidos só por nome via registry/config |
+| `core/pipeline.py` | concluído (testado) | OS-007 | `extract_with_fallback()` (pymupdf → tesseract) e `synthesize_text()`, plugins resolvidos só por nome via registry/config. `synthesize_text()` ainda sintetiza o texto inteiro numa chamada só — OS-009 vai ligar `cleaner`/`chunker` |
 | `core/config.py` | concluído (testado) | OS-007 | `load_config()` lê `config.yaml` e retorna `Config(extractor, speaker)` |
 | `plugins/registry.py` | concluído (testado) | OS-007 | `EXTRACTORS = {"pymupdf", "tesseract"}`, `SPEAKERS = {"kokoro"}`, conforme `ARQUITETURA.md` seção 4.3 |
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
@@ -70,7 +70,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 6. **OS-006 — `plugins/extractors/tesseract_ocr.py`** — `TesseractOCR` usando a heurística aprovada — status: concluída
 7. **OS-007 — `core/pipeline.py`** — orquestração síncrona mínima ligando extractor → speaker (+ preenche `plugins/registry.py` e `core/config.py`) — status: concluída
 8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
-9. Ligar cleaner/chunker em `core/pipeline.py` (substitui a síntese de texto inteiro numa chamada só)
+9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: aberta, aguardando execução (ver `docs/os/OS-009-pipeline-cleaner-chunker.md`)
 10. API mínima (`POST /books`, `GET /books/{id}/status`)
 11. Player web básico
 
