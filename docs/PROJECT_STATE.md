@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-009 concluída — `core/pipeline.py` agora limpa e faz chunking do texto antes de sintetizar: `extract_clean_text()` (extração + `clean_text()`) e `synthesize_text()` chamando o Speaker uma vez por chunk (`sequence` incremental, `chapter_id` em todos, texto vazio não chama o Speaker). 6 testes novos/atualizados (47 no total do projeto).
+**Fase:** OS-010 concluída — API mínima FastAPI (`POST /books`, `GET /books/{id}/status`) rodando o pipeline síncrono no próprio request, com persistência em SQLite puro (stdlib `sqlite3`, sem ORM) via `storage/db.py`. Falhas do pipeline viram `status="error"` sem 500 não tratado. 7 testes novos (54 no total do projeto).
 
-**Última OS concluída:** OS-009 — liga cleaner/chunker em core/pipeline.py.
+**Última OS concluída:** OS-010 — API mínima.
 
-**OS em andamento:** OS-010 — API mínima, `POST /books` + `GET /books/{id}/status`, síncrona, com SQLite (ver `docs/os/OS-010-api-minima.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-010:** a definir — candidato no backlog é o player web básico.
+**Próxima OS a abrir:** a definir — candidato no backlog é o player web básico.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -54,9 +54,9 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
 | `processing/chunker.py` | concluído (testado) | OS-008 | `chunk_text(text, max_chars=1000)` divide por sentença via `re`, nunca corta sentença ao meio (sentença isolada maior que `max_chars` vira chunk próprio) |
-| `api/` (FastAPI) | não iniciado | OS-001 | Stubs vazios — implementação real é OS-010 |
+| `api/` (FastAPI) | concluído (testado) | OS-010 | `api/main.py` (app + lifespan que roda `db.init_db()`) e `api/routes_books.py` (`POST /books`, `GET /books/{id}/status`) — pipeline síncrono no request, falha vira `status="error"` sem 500 |
 | `worker/` (fila) | não iniciado | OS-001 | Stub vazio — aguarda decisão #3 (fila assíncrona) |
-| `storage/` | não iniciado | OS-001 | Stubs vazios — `db.py` ganha implementação real na OS-010; `audio_store.py` fica para depois |
+| `storage/` | em andamento | OS-010 | `db.py` concluído (testado) — `sqlite3` puro, tabela `books`; `audio_store.py` continua stub vazio, fica para depois |
 | `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
@@ -72,7 +72,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 7. **OS-007 — `core/pipeline.py`** — orquestração síncrona mínima ligando extractor → speaker (+ preenche `plugins/registry.py` e `core/config.py`) — status: concluída
 8. **OS-008 — `processing/cleaner.py` + `processing/chunker.py`** — status: concluída
 9. **OS-009 — Ligar cleaner/chunker em `core/pipeline.py`** — substitui a síntese de texto inteiro numa chamada só — status: concluída
-10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: aberta, aguardando execução (ver `docs/os/OS-010-api-minima.md`)
+10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: concluída
 11. Player web básico
 
 ## 6. Riscos e bloqueios conhecidos
