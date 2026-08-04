@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.models import Book
 from storage import db
@@ -11,7 +11,7 @@ def _book(book_id: str = "book-1", status: str = "uploaded") -> Book:
         title="Test Book",
         original_filename="test.pdf",
         status=status,
-        created_at=datetime(2026, 1, 1, 12, 0, 0),
+        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
     )
 
 

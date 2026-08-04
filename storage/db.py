@@ -1,0 +1,82 @@
+import sqlite3
+from datetime import datetime
+
+from core.models import Book
+
+DEFAULT_DB_PATH = "books.db"
+
+
+def _resolve_path(db_path: str | None) -> str:
+    return db_path if db_path is not None else DEFAULT_DB_PATH
+
+
+def init_db(db_path: str | None = None) -> None:
+    """Cria a tabela `books` no banco (idempotente), no caminho informado ou no padrão do projeto."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS books (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                original_filename TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def create_book(book: Book, db_path: str | None = None) -> None:
+    """Insere um novo Book no banco."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO books (id, title, original_filename, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                book.id,
+                book.title,
+                book.original_filename,
+                book.status,
+                book.created_at.isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_book(book_id: str, db_path: str | None = None) -> Book | None:
+    """Busca um Book pelo id. Devolve None se não existir."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        row = conn.execute(
+            "SELECT id, title, original_filename, status, created_at "
+            "FROM books WHERE id = ?",
+            (book_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        return None
+
+    return Book(
+        id=row[0],
+        title=row[1],
+        original_filename=row[2],
+        status=row[3],
+        created_at=datetime.fromisoformat(row[4]),
+    )
+
+
+def update_book_status(book_id: str, status: str, db_path: str | None = None) -> None:
+    """Atualiza o status de um Book existente."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute("UPDATE books SET status = ? WHERE id = ?", (status, book_id))
+        conn.commit()
+    finally:
+        conn.close()

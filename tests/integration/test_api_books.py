@@ -3,6 +3,7 @@ import io
 import pytest
 from fastapi.testclient import TestClient
 
+from api import routes_books
 from api.main import app
 from core import config as config_module
 from core.models import AudioChunk, ExtractedPage
@@ -57,13 +58,16 @@ class FakeSpeaker(Speaker):
 
 
 def _upload_files():
-    return {"file": ("book.pdf", io.BytesIO(b"%PDF-1.4 fake content"), "application/pdf")}
+    return {
+        "file": ("book.pdf", io.BytesIO(b"%PDF-1.4 fake content"), "application/pdf")
+    }
 
 
 @pytest.fixture
 def temp_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test_books.db")
     monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(routes_books, "UPLOAD_DIR", tmp_path / "uploads")
     return db_path
 
 
