@@ -91,6 +91,7 @@ def fake_failing_pipeline(monkeypatch):
 def _create_book_and_pdf(upload_dir, book_id="book-1"):
     upload_dir.mkdir(parents=True, exist_ok=True)
     uploads_module.pdf_path_for(book_id).write_bytes(b"%PDF-1.4 fake content")
+    db_module.init_db()
     book = Book(
         id=book_id,
         title="Test Book",
