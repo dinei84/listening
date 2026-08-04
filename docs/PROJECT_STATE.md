@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-012 — liga JobQueue em worker/tasks.py e na API.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-013 — `storage/audio_store.py` + servir áudio pela API (ver `docs/os/OS-013-audio-store.md`). Pré-requisito do player web: `worker/tasks.py` hoje descarta o retorno de `synthesize_text()`, nenhum `AudioChunk` é persistido.
 
-**Próxima OS a abrir:** a definir — candidato no backlog é o player web básico.
+**Próxima OS a abrir após OS-013:** o player web básico em si (HTML/JS consumindo os endpoints de áudio).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -59,7 +59,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/queues/base.py` | concluído (testado) | OS-011 | `JobQueue` (ABC) — `enqueue`, `claim_next`, `mark_done`, `mark_failed`, `get_job`, copiado verbatim de `ARQUITETURA.md` seção 4.3 |
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
 | `worker/tasks.py` | concluído (testado) | OS-012 | `process_job(job)` (roda o pipeline, marca `Book`/`Job` como `ready`/`done` ou `error`/`failed`) e `run_worker(poll_interval, max_iterations)` (loop de polling); `python -m worker.tasks` para rodar manualmente |
-| `storage/` | em andamento | OS-012 | `db.py` (OS-010) e `uploads.py` (OS-012, `UPLOAD_DIR`/`pdf_path_for()` compartilhado por API e worker) concluídos e testados; tabela `jobs` de `plugins/queues/sqlite_queue.py` vive no mesmo arquivo de `db.py`; `audio_store.py` continua stub vazio |
+| `storage/` | em andamento | OS-012 | `db.py` (OS-010) e `uploads.py` (OS-012, `UPLOAD_DIR`/`pdf_path_for()` compartilhado por API e worker) concluídos e testados; tabela `jobs` de `plugins/queues/sqlite_queue.py` vive no mesmo arquivo de `db.py`; `audio_store.py` stub vazio — implementação real é OS-013 |
 | `player/` (frontend) | não iniciado | OS-001 | Stub vazio — implementação real é OS-007+ |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
@@ -78,11 +78,13 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 10. **OS-010 — API mínima** (`POST /books`, `GET /books/{id}/status`, síncrona, SQLite) — status: concluída
 11. **OS-011 — Contrato `JobQueue` + `SQLiteJobQueue`** — status: concluída
 12. **OS-012 — Liga `JobQueue` em `worker/tasks.py` e na API** — `POST /books` passa a enfileirar em vez de processar inline — status: concluída
-13. Player web básico
+13. **OS-013 — `storage/audio_store.py` + servir áudio pela API** — status: aberta, aguardando execução (ver `docs/os/OS-013-audio-store.md`)
+14. Player web básico (depende da OS-013)
 
 ## 6. Riscos e bloqueios conhecidos
 
 - Decisão #3 (fila de jobs) resolvida na decisão #11: `SQLiteJobQueue` como plugin, contrato pronto para trocar para Redis depois sem reescrever pipeline/API/worker.
+- Achado na revisão pré-OS-013: `worker/tasks.py` (OS-012) chama `pipeline.synthesize_text()` mas descarta o retorno — nenhum `AudioChunk` é persistido hoje, e o `KokoroSpeaker` grava em `tempfile.gettempdir()` sem garantia de retenção. Corrigido pela OS-013.
 - Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike — validar quando `PaddleOCR` ganhar OS própria.
 - Threshold `0.85` (decisão #9) é uma margem de segurança, não um ponto fino validado empiricamente — as fixtures do spike não cobriram degradação intermediária. Se `TesseractOCR` em produção mostrar falsos positivos/negativos de fallback, revisitar com mais dados.
 
