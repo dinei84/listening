@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-015 — `GET /books` (listagem de livros).
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-016 — liga a listagem de livros na UI do player (ver `docs/os/OS-016-listagem-no-player.md`).
 
-**Próxima OS a abrir:** a definir — candidato natural é ligar a listagem na UI do player (troca o campo manual de `book_id` por uma lista de livros).
+**Próxima OS a abrir após OS-016:** a definir.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -61,7 +61,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
 | `worker/tasks.py` | concluído (testado) | OS-013 | `process_job(job)` roda o pipeline, persiste os `AudioChunk` via `storage.audio_store.persist_chunks()` e marca `Book`/`Job` como `ready`/`done` ou `error`/`failed`; `run_worker(poll_interval, max_iterations)` faz polling; `python -m worker.tasks` para rodar manualmente |
 | `storage/` | concluído (testado) | OS-015 | `db.py` (OS-010, `list_books()` adicionado na OS-015), `uploads.py` (OS-012) e `audio_store.py` (OS-013 — `persist_chunks`/`list_chunks`/`get_chunk`, tabela `audio_chunks` no mesmo `books.db`, arquivos em `storage/audio/{book_id}/{sequence}.wav`) concluídos e testados; tabela `jobs` de `plugins/queues/sqlite_queue.py` também no mesmo arquivo |
-| `player/` (frontend) | concluído (testado) | OS-014 | HTML/CSS/JS puro (decisão #12): upload, polling, playback sequencial, play/pause, velocidade, resume via `localStorage`. Servido por `api/main.py` (`StaticFiles` em `/`). `test_player_static_files_are_served` passa; verificação manual em navegador real feita na revisão (ver `docs/report/OS-014-report.md` seção 6.1) |
+| `player/` (frontend) | em andamento | OS-014 | HTML/CSS/JS puro (decisão #12): upload, polling, playback sequencial, play/pause, velocidade, resume via `localStorage`. Servido por `api/main.py` (`StaticFiles` em `/`). `test_player_static_files_are_served` passa; verificação manual em navegador real feita na revisão (ver `docs/report/OS-014-report.md` seção 6.1). OS-016 liga a listagem de livros na UI |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
@@ -82,7 +82,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 13. **OS-013 — `storage/audio_store.py` + servir áudio pela API** — status: concluída
 14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-014-player-web-basico.md` e `docs/report/OS-014-report.md` seção 6.1)
 15. **OS-015 — `GET /books` (listagem)** — status: concluída
-16. Ligar a listagem de livros na UI do player (troca o campo manual de `book_id`)
+16. **OS-016 — Liga a listagem de livros na UI do player** — status: aberta, aguardando execução (ver `docs/os/OS-016-listagem-no-player.md`)
 
 ## 6. Riscos e bloqueios conhecidos
 
