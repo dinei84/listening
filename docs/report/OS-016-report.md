@@ -101,4 +101,4 @@ Este mesmo cenário já ocorreu na OS-014 e foi resolvido na revisão pós-entre
 
 ## 7. Link do PR
 
-[a preencher após abertura do PR — aberto como draft]
+https://github.com/dinei84/listening/pull/14 (draft — verificação manual pendente, ver seção 6)
