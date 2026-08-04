@@ -20,7 +20,7 @@
 - [x] Type hints e docstring de uma linha em toda função pública
 - [x] `PROJECT_STATE.md` atualizado (status dos componentes + seção 2)
 - [x] Relatório criado em `docs/report/OS-012-report.md`
-- [ ] PR aberto contra o branch principal, com título `[OS-012] Liga JobQueue em worker/tasks.py e na API` — a abrir na próxima etapa deste fluxo
+- [x] PR aberto contra o branch principal, com título `[OS-012] Liga JobQueue em worker/tasks.py e na API`
 
 ### DoD específico da OS (seção 4 de `docs/os/OS-012-worker-async-books.md`)
 
@@ -95,4 +95,4 @@ Nenhuma. Reforçando a nota já registrada no relatório da OS-011 (não é um b
 
 ## 7. Link do PR
 
-A preencher após abertura do PR na próxima etapa.
+https://github.com/dinei84/listening/pull/10
