@@ -1,6 +1,8 @@
 from core import config as config_module
 from core.models import AudioChunk, ExtractedPage
 from plugins import registry as registry_module
+from processing.chunker import chunk_text
+from processing.cleaner import clean_text
 
 
 def extract_with_fallback(pdf_path: str) -> list[ExtractedPage]:
@@ -15,10 +17,29 @@ def extract_with_fallback(pdf_path: str) -> list[ExtractedPage]:
     return fallback.extract(pdf_path)
 
 
-def synthesize_text(text: str, chapter_id: str) -> list[AudioChunk]:
-    """Sintetiza texto extraído com o Speaker configurado, retornando AudioChunk(s) com chapter_id preenchido."""
+def extract_clean_text(pdf_path: str) -> str:
+    """Extrai o PDF com fallback e devolve o texto de todas as páginas já limpo (headers/footers repetidos removidos, hifenização corrigida)."""
+    pages = extract_with_fallback(pdf_path)
+    return clean_text([page.text for page in pages])
+
+
+def synthesize_text(
+    text: str, chapter_id: str, max_chars: int | None = None
+) -> list[AudioChunk]:
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado, devolvendo um AudioChunk por chunk com sequence incremental e chapter_id preenchido."""
+    chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
+    if not chunks:
+        return []
+
     cfg = config_module.load_config()
     speaker = registry_module.SPEAKERS[cfg.speaker]()
 
-    chunk = speaker.synthesize(text)
-    return [chunk.model_copy(update={"chapter_id": chapter_id})]
+    audio_chunks: list[AudioChunk] = []
+    for sequence, piece in enumerate(chunks):
+        audio_chunk = speaker.synthesize(piece)
+        audio_chunks.append(
+            audio_chunk.model_copy(
+                update={"chapter_id": chapter_id, "sequence": sequence}
+            )
+        )
+    return audio_chunks
