@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** OS-016 implementada, mas **bloqueada em verificação manual** — `player/index.html`/`player/app.js` ganharam uma seção "Meus livros" que busca `GET /books` ao carregar a página, lista `title`/`status`/`created_at`, abre o livro clicado via `openBook()` já existente, tem botão "Atualizar lista" e se atualiza sozinha após upload. Campo manual de `book_id` mantido. Fluxo de backend (`GET /books` retornando os livros certos, ordenados) confirmado de verdade via `curl` com dois PDFs reais processados pelo worker; JS validado por leitura de código e `node --check` (sintaxe). **Falta a verificação em navegador real** exigida pela OS (clique nos itens da lista, upload atualizando a lista sozinho, botão "Atualizar lista") — o agente de execução não teve acesso a ferramenta de automação de navegador neste ambiente. Mesmo protocolo já usado na OS-014: PR aberto como draft até essa verificação acontecer.
+**Fase:** OS-016 concluída — `player/index.html`/`player/app.js` ganharam uma seção "Meus livros": busca `GET /books` ao carregar a página, lista `title`/`status`/`created_at`, abre o livro clicado via `openBook()` já existente, botão "Atualizar lista", e se atualiza sozinha após upload. Campo manual de `book_id` mantido. Verificação manual em navegador real feita na revisão pós-entrega — dois livros reais processados pelo worker apareceram na lista, clique abriu e tocou o áudio até o fim, botão de atualizar disparou nova chamada `GET /books`, e upload simulado via `DataTransfer`+`requestSubmit()` (mesmo caminho de código do formulário real) atualizou a lista sozinha. Detalhes em `docs/report/OS-016-report.md` seção 6.1.
 
-**Última OS concluída:** OS-015 — `GET /books` (listagem de livros). OS-016 implementada, aguardando verificação manual em navegador.
+**Última OS concluída:** OS-016 — liga a listagem de livros na UI do player.
 
-**OS em andamento:** OS-016 — bloqueada em verificação manual (ver `docs/os/OS-016-listagem-no-player.md` e `docs/report/OS-016-report.md`).
+**OS em andamento:** nenhuma.
 
-**Próxima OS a abrir após OS-016:** a definir — só depois que a verificação manual da OS-016 for concluída (mesmo padrão da OS-014).
+**Próxima OS a abrir:** a definir.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -61,7 +61,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
 | `worker/tasks.py` | concluído (testado) | OS-013 | `process_job(job)` roda o pipeline, persiste os `AudioChunk` via `storage.audio_store.persist_chunks()` e marca `Book`/`Job` como `ready`/`done` ou `error`/`failed`; `run_worker(poll_interval, max_iterations)` faz polling; `python -m worker.tasks` para rodar manualmente |
 | `storage/` | concluído (testado) | OS-015 | `db.py` (OS-010, `list_books()` adicionado na OS-015), `uploads.py` (OS-012) e `audio_store.py` (OS-013 — `persist_chunks`/`list_chunks`/`get_chunk`, tabela `audio_chunks` no mesmo `books.db`, arquivos em `storage/audio/{book_id}/{sequence}.wav`) concluídos e testados; tabela `jobs` de `plugins/queues/sqlite_queue.py` também no mesmo arquivo |
-| `player/` (frontend) | bloqueado | OS-016 | HTML/CSS/JS puro (decisão #12): upload, polling, playback sequencial, play/pause, velocidade, resume via `localStorage` (OS-014, verificado em navegador real — `docs/report/OS-014-report.md` seção 6.1) + seção "Meus livros" consumindo `GET /books`, clique abre via `openBook()`, botão "Atualizar lista", auto-atualiza após upload (OS-016). Servido por `api/main.py` (`StaticFiles` em `/`). `test_player_static_files_are_served` passa. Backend (`GET /books`) confirmado via `curl` com dois PDFs reais processados pelo worker; **verificação manual em navegador real da parte nova (OS-016) ainda não feita** — sem ferramenta de automação de browser no ambiente do agente de execução, ver `docs/report/OS-016-report.md` |
+| `player/` (frontend) | concluído (testado) | OS-016 | HTML/CSS/JS puro (decisão #12): upload, polling, playback sequencial, play/pause, velocidade, resume via `localStorage` (OS-014) + seção "Meus livros" consumindo `GET /books`, clique abre via `openBook()`, botão "Atualizar lista", auto-atualiza após upload (OS-016). Servido por `api/main.py` (`StaticFiles` em `/`). `test_player_static_files_are_served` passa; verificação manual em navegador real de ambas as OS's feita na revisão (`docs/report/OS-014-report.md` seção 6.1, `docs/report/OS-016-report.md` seção 6.1) |
 
 Valores possíveis de status: `não iniciado` · `em andamento` · `implementado sem testes` · `concluído (testado)` · `bloqueado`.
 
@@ -82,7 +82,7 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 13. **OS-013 — `storage/audio_store.py` + servir áudio pela API** — status: concluída
 14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-014-player-web-basico.md` e `docs/report/OS-014-report.md` seção 6.1)
 15. **OS-015 — `GET /books` (listagem)** — status: concluída
-16. **OS-016 — Liga a listagem de livros na UI do player** — status: implementada, bloqueada em verificação manual em navegador (ver `docs/os/OS-016-listagem-no-player.md` e `docs/report/OS-016-report.md`)
+16. **OS-016 — Liga a listagem de livros na UI do player** — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-016-listagem-no-player.md` e `docs/report/OS-016-report.md` seção 6.1)
 
 ## 6. Riscos e bloqueios conhecidos
 
