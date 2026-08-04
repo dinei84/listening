@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-014 — player web básico.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-015 — `GET /books` (listagem de livros), ver `docs/os/OS-015-listagem-livros.md`.
 
-**Próxima OS a abrir:** a definir — candidato natural é `GET /books` (listagem), hoje inexistente e explicitamente fora do escopo da OS-014.
+**Próxima OS a abrir após OS-015:** a definir — candidato natural é ligar a listagem na UI do player (troca o campo manual de `book_id` por uma lista de livros).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -56,7 +56,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
 | `processing/chunker.py` | concluído (testado) | OS-008 | `chunk_text(text, max_chars=1000)` divide por sentença via `re`, nunca corta sentença ao meio (sentença isolada maior que `max_chars` vira chunk próprio) |
-| `api/` (FastAPI) | concluído (testado) | OS-013 | `api/main.py` (app + lifespan que roda `db.init_db()` e `audio_store.init_db()`), `api/routes_books.py` (`POST /books`, `GET /books/{id}/status`) e `api/routes_audio.py` (`GET /books/{id}/audio`, `GET /books/{id}/audio/{sequence}`) |
+| `api/` (FastAPI) | em andamento | OS-013 | `api/main.py` (app + lifespan que roda `db.init_db()` e `audio_store.init_db()`), `api/routes_books.py` (`POST /books`, `GET /books/{id}/status`) e `api/routes_audio.py` (`GET /books/{id}/audio`, `GET /books/{id}/audio/{sequence}`); `GET /books` (listagem) é a OS-015 |
 | `plugins/queues/base.py` | concluído (testado) | OS-011 | `JobQueue` (ABC) — `enqueue`, `claim_next`, `mark_done`, `mark_failed`, `get_job`, copiado verbatim de `ARQUITETURA.md` seção 4.3 |
 | `plugins/queues/sqlite_queue.py` | concluído (testado) | OS-011 | `SQLiteJobQueue` — tabela `jobs` no mesmo arquivo de `storage/db.py` (`books.db`); `claim_next()` atômico via `BEGIN IMMEDIATE` + `UPDATE ... WHERE status='queued'` |
 | `worker/tasks.py` | concluído (testado) | OS-013 | `process_job(job)` roda o pipeline, persiste os `AudioChunk` via `storage.audio_store.persist_chunks()` e marca `Book`/`Job` como `ready`/`done` ou `error`/`failed`; `run_worker(poll_interval, max_iterations)` faz polling; `python -m worker.tasks` para rodar manualmente |
@@ -81,6 +81,8 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 12. **OS-012 — Liga `JobQueue` em `worker/tasks.py` e na API** — `POST /books` passa a enfileirar em vez de processar inline — status: concluída
 13. **OS-013 — `storage/audio_store.py` + servir áudio pela API** — status: concluída
 14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-014-player-web-basico.md` e `docs/report/OS-014-report.md` seção 6.1)
+15. **OS-015 — `GET /books` (listagem)** — status: aberta, aguardando execução (ver `docs/os/OS-015-listagem-livros.md`)
+16. Ligar a listagem de livros na UI do player (troca o campo manual de `book_id`)
 
 ## 6. Riscos e bloqueios conhecidos
 

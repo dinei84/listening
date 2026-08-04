@@ -33,6 +33,8 @@ sudo apt-get install espeak-ng
 pytest
 ```
 
+Para subir a API + worker e testar o fluxo completo (upload → processamento → player), ver `RUNBOOK.md`.
+
 ## Estrutura
 
 ```
@@ -43,7 +45,7 @@ audiobook/
 ├── api/            API FastAPI para upload e status de jobs
 ├── worker/         Fila de jobs assíncrona
 ├── storage/        Persistência de áudio e metadados
-├── player/         Frontend web (React)
+├── player/         Frontend web (HTML/CSS/JS puro, sem build step)
 ├── tests/          Testes unitários e de integração
 ├── config.yaml     Configuração (extractor, speaker)
 └── README.md       Este arquivo
