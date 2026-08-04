@@ -7,6 +7,9 @@ const pdfInput = document.getElementById("pdf-input");
 const uploadStatus = document.getElementById("upload-status");
 const manualForm = document.getElementById("manual-form");
 const bookIdInput = document.getElementById("book-id-input");
+const refreshBooksBtn = document.getElementById("refresh-books-btn");
+const booksList = document.getElementById("books-list");
+const booksListEmpty = document.getElementById("books-list-empty");
 const playerSection = document.getElementById("player-section");
 const playerTitle = document.getElementById("player-title");
 const playerStatus = document.getElementById("player-status");
@@ -60,6 +63,43 @@ async function fetchStatus(bookId) {
     throw new Error("Livro não encontrado");
   }
   return response.json();
+}
+
+async function fetchBooks() {
+  const response = await fetch("/books");
+  if (!response.ok) {
+    throw new Error("Falha ao buscar livros");
+  }
+  return response.json();
+}
+
+function formatCreatedAt(isoString) {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return isoString;
+  return date.toLocaleString();
+}
+
+function renderBooksList(books) {
+  booksList.innerHTML = "";
+  booksListEmpty.hidden = books.length > 0;
+  booksListEmpty.textContent = "Nenhum livro ainda.";
+  for (const book of books) {
+    const li = document.createElement("li");
+    li.textContent = `${book.title} — ${book.status} — ${formatCreatedAt(book.created_at)}`;
+    li.dataset.bookId = book.id;
+    li.addEventListener("click", () => openBook(book.id, null));
+    booksList.appendChild(li);
+  }
+}
+
+async function refreshBooksList() {
+  try {
+    const books = await fetchBooks();
+    renderBooksList(books);
+  } catch (err) {
+    booksListEmpty.hidden = false;
+    booksListEmpty.textContent = `Erro ao carregar livros: ${err.message}`;
+  }
 }
 
 async function fetchAudioChunks(bookId) {
@@ -155,9 +195,14 @@ uploadForm.addEventListener("submit", async (event) => {
     uploadStatus.textContent = `Enviado. id: ${id}`;
     bookIdInput.value = id;
     openBook(id, null);
+    refreshBooksList();
   } catch (err) {
     uploadStatus.textContent = `Erro: ${err.message}`;
   }
+});
+
+refreshBooksBtn.addEventListener("click", () => {
+  refreshBooksList();
 });
 
 manualForm.addEventListener("submit", (event) => {
@@ -214,6 +259,7 @@ restartBtn.addEventListener("click", () => {
 });
 
 (function init() {
+  refreshBooksList();
   const saved = loadSavedState();
   if (saved && saved.bookId) {
     bookIdInput.value = saved.bookId;
