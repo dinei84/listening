@@ -35,7 +35,7 @@ audiobook/
 │   │   ├── base.py        # classe abstrata Extractor
 │   │   ├── pymupdf_extractor.py
 │   │   ├── tesseract_ocr.py
-│   │   ├── paddle_ocr.py
+│   │   ├── easyocr_extractor.py  # decisão #13 — substitui paddle_ocr.py do roadmap original
 │   │   └── cloud_ocr_fallback.py
 │   ├── speakers/
 │   │   ├── base.py        # classe abstrata Speaker
@@ -94,12 +94,12 @@ class Extractor(ABC):
         ...
 ```
 
-Regra de decisão do pipeline: tentar `PyMuPDFExtractor` primeiro (grátis, rápido). Se `supports()` retornar `False` ou a confiança vier baixa, cair para `TesseractOCR` → `PaddleOCR` → `CloudOCRFallback`, nessa ordem de custo crescente.
+Regra de decisão do pipeline: tentar `PyMuPDFExtractor` primeiro (grátis, rápido). Se `supports()` retornar `False` ou a confiança vier baixa, cair para `TesseractOCR` → `EasyOCRExtractor` → `CloudOCRFallback`, nessa ordem de custo crescente.
 
 **Heurística de "confiança baixa" (decisão #8/#9 em `PROJECT_STATE.md`, aprovada após spike da OS-005):** cair para o próximo extractor da cadeia quando `avg_confidence_words_normalized < 0.85` **ou** `words_counted == 0`. Preenchimento de `ExtractedPage.confidence` por extractor:
 
 - **TesseractOCR:** coletar `conf` por palavra via `pytesseract.image_to_data()`, filtrar entradas com `text != ""` e `conf >= 0`, `confidence = mean(conf_filtrado) / 100.0`. Sem palavras válidas → `confidence = 0.0`.
-- **PaddleOCR:** usar `rec_score`/`rec_scores` por item reconhecido, `confidence = mean(rec_scores_da_página)`. Sem itens reconhecidos → `confidence = 0.0`.
+- **EasyOCRExtractor:** coletar o `confidence` (0.0–1.0) de cada região de texto devolvida por `reader.readtext()`, `confidence = mean(confidences_da_página)`. Sem regiões reconhecidas → `confidence = 0.0`. (Decisão #13: substitui o PaddleOCR original do roadmap — mesma faixa 0.0–1.0 de confidence, então reaproveita o mesmo threshold `0.85` por analogia ao Tesseract, sem re-derivar; ver `PROJECT_STATE.md` decisão #13 para a ressalva.)
 
 Evidência: `docs/report/OS-005-report.md`. Nota de limitação (registrada no spike, não invalida a decisão): as fixtures usadas cobriram bem os dois extremos (texto legível ~0.90-0.96 / falha total 0.0), mas não um caso de degradação intermediária — o valor `0.85` é uma margem de segurança abaixo do cluster de sucesso observado, não um ponto de corte fino validado empiricamente.
 
@@ -175,7 +175,7 @@ Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, reso
 EXTRACTORS = {
     "pymupdf": PyMuPDFExtractor,
     "tesseract": TesseractOCR,
-    "paddleocr": PaddleOCR,
+    "easyocr": EasyOCRExtractor,
     "cloud_ocr": CloudOCRFallback,
 }
 
@@ -264,6 +264,6 @@ class Job(BaseModel):
 2. API FastAPI com upload e status de job
 3. Player web básico (play/pause, velocidade, retomar posição)
 4. Fila assíncrona (Celery/RQ) + processamento em background
-5. OCR (Tesseract → PaddleOCR → cloud fallback)
+5. OCR (Tesseract → EasyOCR → cloud fallback) — decisão #13, substitui PaddleOCR do roadmap original
 6. Opção de voz premium via TTS cloud
 7. Detecção automática de capítulos

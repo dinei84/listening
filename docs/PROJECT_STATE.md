@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-016 — liga a listagem de livros na UI do player.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-017 — `plugins/extractors/easyocr_extractor.py` (terceiro elo da cadeia de OCR, decisão #13 — substitui PaddleOCR original) (ver `docs/os/OS-017-easyocr-extractor.md`).
 
-**Próxima OS a abrir:** a definir.
+**Próxima OS a abrir após OS-017:** a definir — candidato natural é ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py` (hoje só conhece pymupdf→tesseract, 2 elos).
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -38,6 +38,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | 10 | 2026-08-03 | **Decisão #4 confirmada: SQLite para a API mínima (OS-010), processamento síncrono no request (sem fila).** A decisão #3 (Celery/Redis vs. algo mais simples) continua em aberto — só passa a importar quando a API precisar mesmo ser assíncrona | Confirmado pelo dono do projeto. Segue o roadmap de `ARQUITETURA.md` seção 8, que já colocava a API (passo 2) antes da fila assíncrona (passo 4). Evita resolver a decisão #3 antes da hora, mantendo a filosofia de baixa infraestrutura do `HANDOFF.md` |
 | 11 | 2026-08-03 | **Decisão #3 resolvida: fila de jobs em SQLite (`SQLiteJobQueue`), tratada como plugin.** Contrato `JobQueue` novo, proposto e aprovado pelo dono do projeto, incorporado em `ARQUITETURA.md` seção 4.3. Celery+Redis fica descartado por agora, mas a interface já existe para que uma futura `RedisJobQueue` seja só uma nova classe + entrada no registry, sem reescrever `core/pipeline.py`/`api/`/`worker/tasks.py` | Segue a mesma regra de ouro de plugin já usada para Extractor/Speaker (`ARQUITETURA.md` seção 1: "pode ser substituído por algo melhor no futuro, é plugin"). Dono do projeto pediu explicitamente para não fechar a porta pra Redis mais tarde, sem adicionar a complexidade dele agora |
 | 12 | 2026-08-04 | **Player web em HTML/CSS/JS puro, sem build step (sem React).** `ARQUITETURA.md` seção 3 tinha "React" só como comentário informal na árvore de pastas original — nunca foi decisão formal. Atualizado para refletir a escolha real | Confirmado pelo dono do projeto. Mesma filosofia de baixa infraestrutura já aplicada o projeto inteiro (sem ORM, sem Celery, stdlib sempre que dá) — React exigiria npm/node_modules/bundler, uma segunda toolchain só pro player "básico" |
+| 13 | 2026-08-04 | **Terceiro extractor da cadeia de OCR é `EasyOCRExtractor` (torch), não `PaddleOCR` como no roadmap original.** `paddlepaddle` sozinho baixa ~195MB (framework de deep learning novo); `torch` já está instalado via Kokoro, e `EasyOCR` o usa em vez de trazer um segundo framework do zero. `ARQUITETURA.md` seções 3, 4.1, 4.4 e 8 atualizadas (`paddle_ocr.py`→`easyocr_extractor.py`, `"paddleocr"`→`"easyocr"` no registry). Fórmula de confidence: mesma faixa 0.0–1.0 do PaddleOCR original, então reaproveita o threshold `0.85` (decisão #9) por analogia ao Tesseract — **não é uma nova validação empírica**, é uma decisão de engenharia justificada pela semelhança de formato do confidence, a confirmar/ajustar quando `EasyOCRExtractor` tiver uso real | Confirmado pelo dono do projeto. Mesma filosofia de baixa infraestrutura (decisão #12, `HANDOFF.md` seção 2) — evitar uma segunda dependência pesada de deep learning quando a primeira (torch, via Kokoro) já cobre a mesma necessidade |
 
 > Toda OS que tomar uma decisão de arquitetura nova ou alterar uma decisão existente deve atualizar esta tabela.
 
@@ -52,6 +53,7 @@ Registrar aqui toda decisão relevante, na ordem em que foram tomadas. Nunca apa
 | `plugins/extractors/base.py` | concluído (testado) | OS-003 | Classe abstrata `Extractor` com `supports()` e `extract()` |
 | `plugins/extractors/pymupdf_extractor.py` | concluído (testado) | OS-003 | `PyMuPDFExtractor` com suporte a PDF nativo e image-only |
 | `plugins/extractors/tesseract_ocr.py` | concluído (testado) | OS-006 | `TesseractOCR` com fórmula de confidence aprovada (decisão #9) |
+| `plugins/extractors/easyocr_extractor.py` | não iniciado | — | Terceiro elo da cadeia de OCR (decisão #13, substitui PaddleOCR do roadmap original) — implementação real é OS-017 |
 | `plugins/speakers/base.py` | concluído (testado) | OS-004 | Classe abstrata `Speaker` com `synthesize()` e `cost_per_char` |
 | `plugins/speakers/kokoro_speaker.py` | concluído (testado) | OS-004 | `KokoroSpeaker` com mock de inferência nos testes |
 | `processing/cleaner.py` | concluído (testado) | OS-008 | `clean_text(pages)` remove linhas repetidas em ≥2 páginas (header/footer) e corrige hifenização de quebra de linha; preserva parágrafos |
@@ -83,15 +85,16 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 14. **OS-014 — Player web básico** (play/pause, velocidade, retomar posição — HTML/CSS/JS puro) — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-014-player-web-basico.md` e `docs/report/OS-014-report.md` seção 6.1)
 15. **OS-015 — `GET /books` (listagem)** — status: concluída
 16. **OS-016 — Liga a listagem de livros na UI do player** — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-016-listagem-no-player.md` e `docs/report/OS-016-report.md` seção 6.1)
+17. **OS-017 — `plugins/extractors/easyocr_extractor.py`** (terceiro elo da cadeia de OCR, decisão #13) — status: aberta, aguardando execução (ver `docs/os/OS-017-easyocr-extractor.md`)
+18. Ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py`
 
 ## 6. Riscos e bloqueios conhecidos
 
-- **Em aberto:** a verificação manual em navegador exigida pelo DoD da OS-016 (lista de livros renderizada ao carregar, clique num item abrindo o livro, botão "Atualizar lista", auto-atualização após upload, campo manual ainda funcionando) não foi feita — o agente de execução não teve acesso a ferramenta de automação de navegador neste ambiente. Backend e JS confirmados por outros meios (`curl` com dois PDFs reais processados pelo worker, `node --check` na sintaxe, leitura de código); PR aberto como draft até a verificação em navegador real acontecer, mesmo protocolo já usado na OS-014 (ver `docs/report/OS-016-report.md`).
-- **Resolvido:** a verificação manual em navegador exigida pelo DoD da OS-014 (upload → polling → playback automático em sequência → troca de velocidade → reload → retomada de posição) foi concluída na revisão pós-entrega, com acesso a navegador real. Único item não exercitado fim a fim: o clique no seletor nativo de arquivo do SO (barreira de segurança do próprio browser, não do player) — o endpoint que ele chama foi validado via `curl` e o código revisado. Detalhes em `docs/report/OS-014-report.md` seção 6.1.
+- **Resolvido:** a verificação manual em navegador exigida pelos DoDs da OS-014 e da OS-016 foi concluída em ambos os casos na revisão pós-entrega, com acesso a navegador real. Único item não exercitado fim a fim nas duas: o clique no seletor nativo de arquivo do SO (barreira de segurança do próprio browser, não do player) — o endpoint que ele chama foi validado via `curl`/`DataTransfer`+`requestSubmit()` e o código revisado. Detalhes em `docs/report/OS-014-report.md` seção 6.1 e `docs/report/OS-016-report.md` seção 6.1.
 - Nova ferramenta de dev: `.claude/launch.json` configurado para subir a API (`uvicorn api.main:app`) via preview do navegador em sessões futuras. Lembrar de também rodar `python -m worker.tasks` numa janela separada para o processamento acontecer de verdade.
 - Decisão #3 (fila de jobs) resolvida na decisão #11: `SQLiteJobQueue` como plugin, contrato pronto para trocar para Redis depois sem reescrever pipeline/API/worker.
 - Achado na revisão pré-OS-013 (`worker/tasks.py` descartava o retorno de `synthesize_text()`, nenhum `AudioChunk` persistido) — corrigido pela OS-013: `worker/tasks.py` agora chama `storage.audio_store.persist_chunks()` antes de marcar o `Book` como `ready`.
-- Confidence do PaddleOCR foi levantado por documentação oficial (`rec_score` / `rec_scores`) sem validação empírica local no spike — validar quando `PaddleOCR` ganhar OS própria.
+- Decisão #13: o terceiro extractor da cadeia de OCR passa a ser `EasyOCRExtractor` (reaproveita o `torch` já instalado via Kokoro), não `PaddleOCR` (~195MB de `paddlepaddle`, framework novo). A fórmula de confidence reaproveita o threshold `0.85` por analogia ao Tesseract, sem validação empírica própria ainda — validar quando `EasyOCRExtractor` ganhar OS própria e tiver uso real.
 - Threshold `0.85` (decisão #9) é uma margem de segurança, não um ponto fino validado empiricamente — as fixtures do spike não cobriram degradação intermediária. Se `TesseractOCR` em produção mostrar falsos positivos/negativos de fallback, revisitar com mais dados.
 
 ## 7. Como este arquivo deve ser mantido
