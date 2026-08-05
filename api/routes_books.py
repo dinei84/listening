@@ -119,3 +119,20 @@ async def delete_book(book_id: str) -> dict[str, str]:
     uploads.delete_pdf(book_id)
     db.delete_book(book_id)
     return {"id": book_id, "status": "deleted"}
+
+
+@router.get("/books/{book_id}/chapters")
+async def get_book_chapters(book_id: str) -> list[dict[str, str | int]]:
+    """Devolve os capítulos detectados de um Book, ordenados. Sem o texto do capítulo (seria o livro inteiro). 404 se o id não existir."""
+    if db.get_book(book_id) is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return [
+        {
+            "id": chapter.id,
+            "title": chapter.title,
+            "order": chapter.order,
+            "start_page": chapter.start_page,
+            "end_page": chapter.end_page,
+        }
+        for chapter in db.list_chapters(book_id)
+    ]

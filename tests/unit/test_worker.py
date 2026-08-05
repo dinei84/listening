@@ -551,3 +551,167 @@ def test_worker_process_job_completes_when_no_higher_priority_job(
     assert db_module.get_book(book.id).status == "ready"
     assert queue.get_job(job.id).status == "done"
     assert len(speaker.synthesized_texts) == 3
+
+
+# --- OS-027: capítulos ---------------------------------------------------------
+
+
+class TwoChapterExtractor(Extractor):
+    """Uma página por página real do PDF, com texto único e identificável."""
+
+    def supports(self, pdf_path):
+        return True
+
+    def extract(self, pdf_path, page_range=None):
+        import fitz
+
+        doc = fitz.open(pdf_path)
+        total = len(doc)
+        doc.close()
+        return [
+            ExtractedPage(
+                page_number=i + 1,
+                text=f"Pagina numero {i + 1} com conteudo proprio.",
+                confidence=1.0,
+                source="two_chapter",
+            )
+            for i in range(total)
+        ]
+
+
+def _create_real_pdf_with_toc(upload_dir, book_id="book-1", pages=6, toc=None):
+    """Substitui o PDF fake por um PDF real com sumário — detect_chapters precisa abrir de verdade."""
+    import fitz
+
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    doc = fitz.open()
+    for i in range(pages):
+        page = doc.new_page()
+        page.insert_text((72, 72), f"Pagina {i + 1}")
+    if toc:
+        doc.set_toc(toc)
+    doc.save(str(uploads_module.pdf_path_for(book_id)))
+    doc.close()
+
+
+class CountingChapterSpeaker(Speaker):
+    """FakeSpeaker que conta chamadas — necessário para provar que a retomada não re-sintetiza."""
+
+    def __init__(self):
+        self.call_count = 0
+
+    @property
+    def cost_per_char(self):
+        return 0.0
+
+    def synthesize(self, text, voice=None, lang_code=None):
+        self.call_count += 1
+        fd, path = tempfile.mkstemp(suffix=".wav")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"RIFF-fake-wav-bytes")
+        return AudioChunk(
+            chapter_id="",
+            sequence=0,
+            file_path=path,
+            duration_seconds=1.0,
+            engine_used="counting_chapter",
+        )
+
+
+@pytest.fixture
+def chapter_pipeline(monkeypatch):
+    speaker = CountingChapterSpeaker()
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": TwoChapterExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
+    return speaker
+
+
+def test_worker_process_job_assigns_correct_chapter_id_per_audio_chunk(
+    temp_paths, chapter_pipeline
+):
+    book = _create_book_and_pdf(temp_paths)
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    chunks = audio_store_module.list_chunks(book.id)
+    chapter_ids = {c.chapter_id for c in chunks}
+    assert (
+        len(chapter_ids) == 2
+    ), f"esperado um chapter_id por capítulo, veio {chapter_ids}"
+    assert job.id not in chapter_ids, "chapter_id não pode mais ser o id do Job"
+
+
+def test_worker_process_job_keeps_sequence_global_across_chapters(
+    temp_paths, chapter_pipeline
+):
+    book = _create_book_and_pdf(temp_paths)
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    sequences = [c.sequence for c in audio_store_module.list_chunks(book.id)]
+    assert sequences == list(
+        range(len(sequences))
+    ), f"sequence deve ser global e contínua, veio {sequences}"
+    assert len(sequences) >= 2
+
+
+def test_worker_process_job_persists_chapters(temp_paths, chapter_pipeline):
+    book = _create_book_and_pdf(temp_paths)
+    _create_real_pdf_with_toc(
+        temp_paths, pages=6, toc=[[1, "Primeiro", 1], [1, "Segundo", 4]]
+    )
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    chapters = db_module.list_chapters(book.id)
+    assert [c.title for c in chapters] == ["Primeiro", "Segundo"]
+    assert [(c.start_page, c.end_page) for c in chapters] == [(1, 3), (4, 6)]
+
+
+def test_chunks_total_correct_with_multiple_chapters(temp_paths, chapter_pipeline):
+    """Regressão OS-024: chunk_total é a soma de todos os capítulos."""
+    book = _create_book_and_pdf(temp_paths)
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    persistidos = len(audio_store_module.list_chunks(book.id))
+    assert db_module.get_book(book.id).chunk_total == persistidos
+
+
+def test_resume_consistency_check_works_across_chapters(temp_paths, chapter_pipeline):
+    """Regressão OS-022: retomar um livro com capítulos não re-sintetiza o que já existe."""
+    speaker = chapter_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+    total_primeira = len(audio_store_module.list_chunks(book.id))
+    chamadas_primeira = speaker.call_count
+
+    # Segunda passada: tudo já persistido, nada deve ser sintetizado de novo.
+    worker_tasks.process_job(job)
+
+    assert len(audio_store_module.list_chunks(book.id)) == total_primeira
+    assert speaker.call_count == chamadas_primeira
+    assert db_module.get_book(book.id).status == "ready"

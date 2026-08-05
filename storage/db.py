@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime
 
-from core.models import Book
+from core.models import Book, Chapter
 
 DEFAULT_DB_PATH = "books.db"
 
@@ -24,6 +24,20 @@ def init_db(db_path: str | None = None) -> None:
                 error_message TEXT,
                 chunk_total INTEGER,
                 language TEXT
+            )
+            """)
+        # `order` é palavra reservada no SQL, daí a coluna se chamar chapter_order.
+        # O texto do capítulo NÃO é persistido: seria o livro inteiro duplicado no
+        # banco, e nenhum consumidor precisa dele (OS-027).
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chapters (
+                book_id TEXT NOT NULL,
+                id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                chapter_order INTEGER NOT NULL,
+                start_page INTEGER NOT NULL,
+                end_page INTEGER NOT NULL,
+                PRIMARY KEY (book_id, id)
             )
             """)
         conn.commit()
@@ -148,3 +162,56 @@ def set_book_chunk_total(
         conn.commit()
     finally:
         conn.close()
+
+
+def create_chapters(
+    book_id: str, chapters: list[Chapter], db_path: str | None = None
+) -> None:
+    """Persiste os capítulos de um Book, substituindo quaisquer capítulos anteriores do mesmo livro (reprocessar não duplica)."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute("DELETE FROM chapters WHERE book_id = ?", (book_id,))
+        conn.executemany(
+            "INSERT INTO chapters "
+            "(book_id, id, title, chapter_order, start_page, end_page) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    book_id,
+                    chapter.id,
+                    chapter.title,
+                    chapter.order,
+                    chapter.start_page,
+                    chapter.end_page,
+                )
+                for chapter in chapters
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def list_chapters(book_id: str, db_path: str | None = None) -> list[Chapter]:
+    """Lista os capítulos persistidos de um Book, ordenados por order. O campo text vem vazio — não é persistido."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        rows = conn.execute(
+            "SELECT id, title, chapter_order, start_page, end_page "
+            "FROM chapters WHERE book_id = ? ORDER BY chapter_order",
+            (book_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        Chapter(
+            id=row[0],
+            title=row[1],
+            order=row[2],
+            text="",
+            start_page=row[3],
+            end_page=row[4],
+        )
+        for row in rows
+    ]
