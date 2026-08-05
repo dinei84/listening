@@ -29,12 +29,23 @@ def _fake_result(num_samples=100):
     return FakeResult()
 
 
+class FakeG2P:
+    """Dublê do G2P do Kokoro: fonemas determinísticos na proporção do texto (densidade ~1.19, a medida de pt no OS-034)."""
+
+    def __init__(self, density=1.19):
+        self.density = density
+
+    def __call__(self, text):
+        return "x" * int(len(text) * self.density), None
+
+
 class FakePipeline:
     """Dublê do KPipeline: registra cada síntese recebida."""
 
-    def __init__(self, lang_code, num_results=1):
+    def __init__(self, lang_code, num_results=1, g2p_density=1.19):
         self.lang_code = lang_code
         self.num_results = num_results
+        self.g2p = FakeG2P(density=g2p_density)
         self.calls = []
 
     def __call__(self, text, voice, speed):
@@ -217,4 +228,103 @@ def test_kokoro_speaker_synthesize_falls_back_to_detection_when_lang_code_is_non
     lang_code, (_, voice, _) = pipeline_factory.single_call()
     assert lang_code == "p"
     assert voice == "pf_dora"
+    os.remove(chunk.file_path)
+
+
+# Frase longa em português SEM pontuação interna (.!?), só espaços entre palavras:
+# ~660 caracteres -> ~785 fonemas no dublê (densidade 1.19), bem acima de 510.
+LONG_PT_TEXT = " ".join(
+    [
+        "a",
+        "engenharia",
+        "de",
+        "seguranca",
+        "requer",
+        "metodos",
+        "formais",
+        "e",
+        "verificacao",
+        "rigorosa",
+        "de",
+        "protocolos",
+        "criptograficos",
+        "em",
+        "sistemas",
+        "distribuidos",
+        "modernos",
+    ]
+    * 6
+)
+
+
+def test_kokoro_speaker_splits_oversized_sentence_before_synthesis(pipeline_factory):
+    speaker = KokoroSpeaker()
+    chunk = speaker.synthesize(LONG_PT_TEXT, lang_code="p")
+
+    pipeline = pipeline_factory.pipelines["p"]
+    assert len(pipeline.calls) > 1
+    for piece, _, _ in pipeline.calls:
+        assert len(pipeline.g2p(piece)[0]) <= 510
+    os.remove(chunk.file_path)
+
+
+def test_kokoro_speaker_never_splits_mid_word(pipeline_factory):
+    speaker = KokoroSpeaker()
+    chunk = speaker.synthesize(LONG_PT_TEXT, lang_code="p")
+
+    original_words = LONG_PT_TEXT.split()
+    piece_words = [
+        word
+        for call in pipeline_factory.pipelines["p"].calls
+        for word in call[0].split()
+    ]
+    assert piece_words == original_words
+    os.remove(chunk.file_path)
+
+
+LONG_PT_TEXT_WITH_PUNCT = " ".join(
+    [
+        (
+            "a engenharia exige metodos formais e verificacao rigorosa, "
+            "com protocolos criptograficos seguros, auditoria constante e "
+            "testes exaustivos de sistemas criticos; tudo sob controle de versao"
+        )
+    ]
+    * 5
+)
+
+
+def test_kokoro_speaker_splits_oversized_text_at_clause_boundaries(
+    pipeline_factory,
+):
+    speaker = KokoroSpeaker()
+    chunk = speaker.synthesize(LONG_PT_TEXT_WITH_PUNCT, lang_code="p")
+
+    pipeline = pipeline_factory.pipelines["p"]
+    assert len(pipeline.calls) > 1
+    original_words = LONG_PT_TEXT_WITH_PUNCT.split()
+    piece_words = [word for call in pipeline.calls for word in call[0].split()]
+    assert piece_words == original_words
+    for piece, _, _ in pipeline.calls:
+        assert len(pipeline.g2p(piece)[0]) <= 510
+    os.remove(chunk.file_path)
+
+
+def test_kokoro_speaker_returns_single_audio_chunk_for_oversized_text(
+    pipeline_factory,
+):
+    chunk = KokoroSpeaker().synthesize(LONG_PT_TEXT, lang_code="p")
+
+    assert isinstance(chunk, AudioChunk)
+    assert len(pipeline_factory.pipelines["p"].calls) > 1
+    os.remove(chunk.file_path)
+
+
+def test_kokoro_speaker_short_text_unchanged(pipeline_factory):
+    speaker = KokoroSpeaker()
+    chunk = speaker.synthesize(PT_TEXT, lang_code="p")
+
+    lang_code, (text, _, _) = pipeline_factory.single_call()
+    assert lang_code == "p"
+    assert text == PT_TEXT
     os.remove(chunk.file_path)

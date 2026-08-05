@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 
 import kokoro
@@ -51,6 +52,82 @@ VOICE_BY_LANG_CODE = {
 # o último idioma detectado com sucesso na mesma instância.
 MIN_DETECTION_CHARS = 40
 
+# Orçamento de fonemas do modelo Kokoro: acima disso o pipeline faz ps[:510] e segue
+# (truncamento silencioso) nos idiomas via espeak (kokoro/pipeline.py, linha 428). O
+# inglês é imune — o en_tokenize divide respeitando o limite (OS-034).
+MAX_PHONEMES = 510
+
+
+def _phoneme_count(text: str, g2p) -> int:
+    """Conta os fonemas que o G2P do Kokoro geraria para o texto (medição real, não estimativa por caracteres)."""
+    return len(g2p(text)[0])
+
+
+def _find_natural_boundary(text: str, center: int) -> int | None:
+    """Devolve o índice para partir text — depois da pontuação (; : ,) ou no espaço — mais próximo de center, preferindo pontuação a espaço; None se não houver."""
+    for target in (",;:", " \t"):
+        best = None
+        for radius in range(len(text)):
+            for pos in (center - radius, center + radius):
+                if 0 < pos < len(text) and text[pos] in target:
+                    best = pos
+                    break
+            if best is not None:
+                break
+        if best is not None:
+            split = best + 1 if text[best] in ",;:" else best
+            if 0 < split < len(text):
+                return split
+    return None
+
+
+def _split_by_phoneme_budget(
+    text: str, g2p, max_phonemes: int = MAX_PHONEMES
+) -> list[str]:
+    """Divide texto cuja fonemização excede max_phonemes em pedaços que não excedam, preferindo fronteiras de ; : , e depois espaço entre palavras; nunca corta no meio de palavra."""
+    text = text.strip()
+    if _phoneme_count(text, g2p) <= max_phonemes:
+        return [text]
+    if not re.search(r"\s", text):
+        # Palavra única acima do orçamento: impossível dividir sem cortar no meio
+        # (~430+ caracteres numa palavra, caso de borda) — emite inteira.
+        return [text]
+
+    # Prefere partir em cláusulas (; : ,), acumulando até o orçamento — medição
+    # real de cada candidato, sem estimativa por caracteres.
+    clauses = [c for c in re.split(r"(?<=[,;:])\s+", text) if c.strip()]
+    if len(clauses) > 1:
+        pieces: list[str] = []
+        current = ""
+        for clause in clauses:
+            clause = clause.strip()
+            if not current:
+                current = clause
+            elif _phoneme_count(f"{current} {clause}", g2p) <= max_phonemes:
+                current = f"{current} {clause}"
+            else:
+                pieces.append(current)
+                current = clause
+        if current:
+            pieces.append(current)
+
+        result: list[str] = []
+        for piece in pieces:
+            if _phoneme_count(piece, g2p) <= max_phonemes:
+                result.append(piece)
+            else:
+                result.extend(_split_by_phoneme_budget(piece, g2p, max_phonemes))
+        return result
+
+    # Sem cláusulas: divide-e-conquista no meio na fronteira (espaço) mais próxima
+    # e recursa em cada metade — sempre reduz o texto, então termina.
+    boundary = _find_natural_boundary(text, len(text) // 2)
+    if boundary is None:
+        return [text]
+    return _split_by_phoneme_budget(
+        text[:boundary], g2p, max_phonemes
+    ) + _split_by_phoneme_budget(text[boundary:], g2p, max_phonemes)
+
 
 class KokoroSpeaker(Speaker):
     def __init__(self):
@@ -67,11 +144,23 @@ class KokoroSpeaker(Speaker):
         pipeline, effective_lang_code = self._get_pipeline(
             lang_code if lang_code is not None else self._detect_lang_code(text)
         )
-        results = pipeline(
-            text, voice=voice or VOICE_BY_LANG_CODE[effective_lang_code], speed=1.0
-        )
+        voice = voice or VOICE_BY_LANG_CODE[effective_lang_code]
+
+        # OS-034: idiomas via espeak (todos exceto en-us/en-gb) são truncados
+        # silenciosamente em 510 fonemas dentro do Kokoro; inglês é dividido pelo
+        # en_tokenize do próprio engine. Para os demais, divide o texto por orçamento
+        # de fonemas (medido com g2p) antes de sintetizar — cada pedaço gera áudio que
+        # é concatenado num único AudioChunk (mesma granularidade de sempre).
+        if effective_lang_code in "ab":
+            pieces = [text]
+        else:
+            pieces = _split_by_phoneme_budget(text, pipeline.g2p)
+
         audio_parts = [
-            result.output.audio for result in results if result.output is not None
+            result.output.audio
+            for piece in pieces
+            for result in pipeline(piece, voice=voice, speed=1.0)
+            if result.output is not None
         ]
 
         if not audio_parts:
