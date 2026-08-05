@@ -248,12 +248,17 @@ def test_detect_chapters_picks_deeper_toc_level_when_level_1_is_only_front_matte
     ]
     chapters = pipeline.detect_chapters(_pdf(tmp_path, 88, toc))
 
-    titulos = [c.title for c in chapters]
-    assert "Capitulo Um" in titulos, (
-        f"deveria usar o nível com a estrutura real, veio {titulos}"
-    )
+    titulos = " | ".join(c.title for c in chapters)
+    # A estrutura real (nível 2) precisa aparecer; o front matter sozinho não serve.
+    # Um capítulo pode vir subdividido em partes, daí a checagem por substring.
+    assert (
+        "Capitulo Um" in titulos
+    ), f"deveria usar o nível com a estrutura real, veio {titulos}"
+    assert "Capitulo Cinco" in titulos
     maior = max(c.end_page - c.start_page + 1 for c in chapters)
-    assert maior < 88 * 0.5, f"nenhum capítulo pode engolir o livro; maior={maior} de 88"
+    assert (
+        maior < 88 * 0.5
+    ), f"nenhum capítulo pode engolir o livro; maior={maior} de 88"
 
 
 def test_detect_chapters_subdivides_oversized_chapter(tmp_path):
@@ -273,9 +278,9 @@ def test_detect_chapters_covers_pages_before_first_toc_entry(tmp_path):
     toc = [[1, "Capitulo Um", 10], [1, "Capitulo Dois", 20]]
     chapters = pipeline.detect_chapters(_pdf(tmp_path, 30, toc))
 
-    assert chapters[0].start_page == 1, (
-        f"as páginas 1-9 sumiriam; primeiro capítulo começa em {chapters[0].start_page}"
-    )
+    assert (
+        chapters[0].start_page == 1
+    ), f"as páginas 1-9 sumiriam; primeiro capítulo começa em {chapters[0].start_page}"
     assert chapters[-1].end_page == 30
 
 
@@ -311,9 +316,9 @@ def test_detect_chapters_prefers_descriptive_title_on_same_page(tmp_path):
     chapters = pipeline.detect_chapters(_pdf(tmp_path, 9, toc))
 
     titulos = " | ".join(c.title for c in chapters)
-    assert "O que sao Design e Arquitetura" in titulos, (
-        f"deveria preferir o título descritivo ao número, veio {titulos}"
-    )
+    assert (
+        "O que sao Design e Arquitetura" in titulos
+    ), f"deveria preferir o título descritivo ao número, veio {titulos}"
 
 
 def test_extract_chapters_loses_no_page_text(tmp_path, monkeypatch):
@@ -329,6 +334,6 @@ def test_extract_chapters_loses_no_page_text(tmp_path, monkeypatch):
 
     todo_texto = " ".join(c.text for c in chapters)
     for numero in range(1, 10):
-        assert f"pagina {numero}." in todo_texto, (
-            f"o texto da página {numero} sumiu — nenhum capítulo o cobre"
-        )
+        assert (
+            f"pagina {numero}." in todo_texto
+        ), f"o texto da página {numero} sumiu — nenhum capítulo o cobre"

@@ -282,7 +282,11 @@ function renderBooksList(books) {
 
     li.dataset.bookId = book.id;
     li.addEventListener("click", () => {
-      bookIdInput.value = book.id;
+      // Mostra o título (legível), mas guarda o id junto: o campo continua
+      // aceitando um book_id digitado à mão (OS-036).
+      bookIdInput.value = book.title;
+      bookIdInput.dataset.bookId = book.id;
+      bookIdInput.dataset.bookTitle = book.title;
       openBook(book.id, null, book.title);
     });
     li.appendChild(label);
@@ -583,8 +587,13 @@ refreshBooksBtn.addEventListener("click", () => {
 
 manualForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const bookId = bookIdInput.value.trim();
-  if (!bookId) return;
+  const digitado = bookIdInput.value.trim();
+  if (!digitado) return;
+  // Se o campo ainda exibe o título vindo de um clique na lista, usa o id guardado;
+  // se o usuário digitou (ou alterou) o texto, trata como book_id (OS-036).
+  const salvo = bookIdInput.dataset.bookId;
+  const titulo = bookIdInput.dataset.bookTitle;
+  const bookId = salvo && digitado === titulo ? salvo : digitado;
   openBook(bookId, null);
 });
 
