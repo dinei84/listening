@@ -160,4 +160,4 @@ Nenhum bloqueio. Duas notas pro dono do projeto, nenhuma delas decisão deste ag
 
 ## 8. Link do PR
 
-[a preencher após abertura do PR]
+https://github.com/dinei84/listening/pull/17
