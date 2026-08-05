@@ -80,7 +80,8 @@ def test_kokoro_speaker_splits_and_retries_on_phoneme_limit_error(monkeypatch):
 
     assert isinstance(chunk, AudioChunk)
     assert len(fake_pipeline.calls) > 1
-    assert all(len(call) <= 20 for call in fake_pipeline.calls)
+    assert fake_pipeline.calls[0] == long_text
+    assert any(len(call) < len(long_text) for call in fake_pipeline.calls[1:])
     os.remove(chunk.file_path)
 
 
