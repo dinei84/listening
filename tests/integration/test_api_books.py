@@ -14,6 +14,7 @@ from plugins.queues import sqlite_queue as sqlite_queue_module
 from plugins.speakers.base import Speaker
 from storage import audio_store as audio_store_module
 from storage import db as db_module
+from storage import progress_store as progress_store_module
 from storage import uploads as uploads_module
 from worker import tasks as worker_tasks
 
@@ -91,6 +92,7 @@ def temp_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(audio_store_module, "AUDIO_DIR", tmp_path / "audio")
     audio_store_module.init_db(db_path)
+    monkeypatch.setattr(progress_store_module, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(uploads_module, "UPLOAD_DIR", tmp_path / "uploads")
     return db_path
 
@@ -663,3 +665,80 @@ def test_get_books_chapters_returns_empty_list_when_none_detected(temp_paths):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+# --- OS-028: progresso de leitura -----------------------------------------------
+
+
+def test_put_and_get_books_progress_roundtrip(temp_paths):
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+
+        put_response = client.put(
+            f"/books/{book_id}/progress",
+            json={"sequence": 4, "position_seconds": 12.5},
+        )
+        get_response = client.get(f"/books/{book_id}/progress")
+
+    assert put_response.status_code == 200
+    assert get_response.status_code == 200
+    body = get_response.json()
+    assert body["sequence"] == 4
+    assert body["position_seconds"] == 12.5
+    assert body["book_id"] == book_id
+
+
+def test_put_books_progress_overwrites_previous(temp_paths):
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+
+        client.put(
+            f"/books/{book_id}/progress", json={"sequence": 1, "position_seconds": 1.0}
+        )
+        client.put(
+            f"/books/{book_id}/progress", json={"sequence": 8, "position_seconds": 80.0}
+        )
+        body = client.get(f"/books/{book_id}/progress").json()
+
+    assert body["sequence"] == 8
+    assert body["position_seconds"] == 80.0
+
+
+def test_get_books_progress_returns_404_when_never_saved(temp_paths):
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+
+        response = client.get(f"/books/{book_id}/progress")
+
+    assert response.status_code == 404
+
+
+def test_get_books_progress_returns_404_for_unknown_book(temp_paths):
+    with TestClient(app) as client:
+        response = client.get("/books/nao-existe/progress")
+
+    assert response.status_code == 404
+
+
+def test_put_books_progress_returns_404_for_unknown_book(temp_paths):
+    with TestClient(app) as client:
+        response = client.put(
+            "/books/nao-existe/progress",
+            json={"sequence": 1, "position_seconds": 1.0},
+        )
+
+    assert response.status_code == 404
+
+
+def test_delete_book_also_removes_reading_progress(temp_paths):
+    """Regressão OS-023: deletar o livro não pode deixar progresso órfão."""
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+        client.put(
+            f"/books/{book_id}/progress", json={"sequence": 2, "position_seconds": 5.0}
+        )
+
+        delete_response = client.delete(f"/books/{book_id}")
+
+    assert delete_response.status_code == 200
+    assert progress_store_module.get_progress(book_id) is None

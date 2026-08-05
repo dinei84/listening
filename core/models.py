@@ -50,6 +50,15 @@ class Book(BaseModel):
     language: str | None = None
 
 
+class ReadingProgress(BaseModel):
+    """Posição de leitura atual de um Book — só a atual, sem histórico (OS-028)."""
+
+    book_id: str
+    sequence: int
+    position_seconds: float
+    updated_at: datetime
+
+
 class Job(BaseModel):
     id: str
     book_id: str

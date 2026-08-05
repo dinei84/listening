@@ -276,6 +276,12 @@ class Book(BaseModel):
     chunk_total: int | None = None  # total de chunks de síntese previsto (OS-024); None até a síntese começar
     language: str | None = None  # idioma forçado no upload (código tipo langdetect: en, pt, es...); None = detecção automática (OS-025)
 
+class ReadingProgress(BaseModel):   # OS-028
+    book_id: str
+    sequence: int
+    position_seconds: float
+    updated_at: datetime
+
 class Job(BaseModel):
     id: str
     book_id: str

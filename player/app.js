@@ -74,10 +74,36 @@ function saveState(bookId, sequence, currentTime, title) {
   const now = Date.now();
   if (now - lastSaveTime < SAVE_THROTTLE_MS) return;
   lastSaveTime = now;
+  // localStorage continua como cache local (resposta imediata ao reabrir a
+  // página), mas desde a OS-028 o servidor é a fonte de verdade.
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({ bookId, sequence, currentTime, title })
   );
+  saveProgressToServer(bookId, sequence, currentTime);
+}
+
+// Grava a posição no servidor. Falha de rede aqui é silenciosa de propósito: o
+// throttle já garante nova tentativa em segundos e perder uma gravação de
+// posição não pode interromper a reprodução.
+function saveProgressToServer(bookId, sequence, currentTime) {
+  fetch(`/books/${bookId}/progress`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sequence, position_seconds: currentTime }),
+  }).catch(() => {});
+}
+
+// Busca a posição salva no servidor. Devolve null quando nunca houve progresso
+// (404) ou se a chamada falhar — o chamador cai no cache do localStorage.
+async function fetchProgress(bookId) {
+  try {
+    const response = await fetch(`/books/${bookId}/progress`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (err) {
+    return null;
+  }
 }
 
 async function uploadBook(file) {
@@ -403,6 +429,20 @@ async function openBook(bookId, resumeState, title) {
   const knownTitle = title || currentBookTitle;
   playerTitle.textContent = knownTitle ? `Livro: ${knownTitle}` : `Livro: ${bookId}`;
   playerStatus.textContent = "Verificando status...";
+
+  // OS-028: o servidor é a fonte de verdade da posição de leitura — sobrevive a
+  // trocar de navegador/dispositivo. O localStorage só vale como cache quando o
+  // servidor não tem nada salvo (ou está inacessível).
+  const serverProgress = await fetchProgress(bookId);
+  if (bookId !== currentBookId) return;
+  if (serverProgress) {
+    pendingResume = {
+      bookId,
+      sequence: serverProgress.sequence,
+      currentTime: serverProgress.position_seconds,
+      title: currentBookTitle,
+    };
+  }
 
   // Desde a OS-021 o áudio é persistido chunk a chunk e `GET /books/{id}/audio`
   // devolve o que já existe sem olhar o status — o player não espera mais "ready".
