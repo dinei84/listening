@@ -1,5 +1,7 @@
+import re
 import uuid
 from collections.abc import Callable
+from itertools import pairwise
 
 import fitz
 
@@ -14,6 +16,13 @@ from processing.cleaner import clean_text
 # header/footer repetido (precisa de >=2 páginas), pequeno o bastante para a
 # navegação por capítulo ser útil num livro longo.
 SYNTHETIC_CHAPTER_PAGES = 10
+
+# Fração máxima do livro que um único capítulo pode cobrir antes de ser considerado
+# inútil para navegação (OS-036). Um TOC cujo nível 1 só lista o front matter fazia o
+# último capítulo herdar todo o resto — medido: "Sobre o Autor" com 415 de 446 páginas
+# (93% do livro) e 320 chunks. Usado para escolher o nível do TOC e para subdividir o
+# que ainda ficar grande demais.
+MAX_CHAPTER_FRACTION = 0.25
 
 
 def extract_with_fallback(pdf_path: str) -> list[ExtractedPage]:
@@ -35,7 +44,7 @@ def extract_clean_text(pdf_path: str) -> str:
 
 
 def detect_chapters(pdf_path: str, total_pages: int | None = None) -> list[Chapter]:
-    """Detecta os capítulos do PDF pelo sumário embutido (nível 1 do TOC) ou, na ausência dele, agrupa páginas em blocos sintéticos; devolve Chapters sem texto preenchido."""
+    """Detecta os capítulos do PDF escolhendo o nível mais útil do sumário embutido (ou blocos sintéticos, se não houver TOC), subdividindo capítulos desproporcionais e cobrindo as páginas iniciais órfãs; devolve Chapters sem texto preenchido."""
     toc: list = []
     try:
         doc = fitz.open(pdf_path)
@@ -57,33 +66,118 @@ def detect_chapters(pdf_path: str, total_pages: int | None = None) -> list[Chapt
     if not total_pages:
         return []
 
-    top_level = [entry for entry in toc if entry[0] == 1]
-    if top_level:
-        starts = [max(1, min(int(entry[2]), total_pages)) for entry in top_level]
-        titles = [
-            str(entry[1]).strip() or f"Capítulo {i + 1}"
-            for i, entry in enumerate(top_level)
-        ]
-    else:
-        starts = list(range(1, total_pages + 1, SYNTHETIC_CHAPTER_PAGES))
-        titles = [f"Parte {i + 1}" for i in range(len(starts))]
-
-    chapters: list[Chapter] = []
-    for order, (start, title) in enumerate(zip(starts, titles)):
-        # O capítulo termina onde o próximo começa; o último vai até o fim do PDF.
-        next_start = starts[order + 1] if order + 1 < len(starts) else total_pages + 1
-        end = max(start, next_start - 1)
-        chapters.append(
-            Chapter(
-                id=str(uuid.uuid4()),
-                title=title,
-                order=order,
-                text="",
-                start_page=start,
-                end_page=end,
+    marcos = _toc_milestones(toc, total_pages)
+    if not marcos:
+        marcos = [
+            (pagina, f"Parte {i + 1}")
+            for i, pagina in enumerate(
+                range(1, total_pages + 1, SYNTHETIC_CHAPTER_PAGES)
             )
+        ]
+
+    # Páginas anteriores ao primeiro marco não podem sumir (OS-036): o primeiro
+    # capítulo passa a começar na página 1. Antes elas ficavam fora de todos os
+    # intervalos e o texto delas nunca era sintetizado.
+    primeira_pagina, primeiro_titulo = marcos[0]
+    if primeira_pagina > 1:
+        marcos[0] = (1, primeiro_titulo)
+
+    intervalos: list[tuple[int, int, str]] = []
+    for i, (inicio, titulo) in enumerate(marcos):
+        proximo = marcos[i + 1][0] if i + 1 < len(marcos) else total_pages + 1
+        intervalos.append((inicio, max(inicio, proximo - 1), titulo))
+
+    return [
+        Chapter(
+            id=str(uuid.uuid4()),
+            title=titulo,
+            order=order,
+            text="",
+            start_page=inicio,
+            end_page=fim,
         )
-    return chapters
+        for order, (inicio, fim, titulo) in enumerate(
+            _subdivide_oversized(intervalos, total_pages)
+        )
+    ]
+
+
+def _is_descriptive(title: str) -> bool:
+    """True se o título diz algo além de um número/algarismo romano (ex: '1', 'IV')."""
+    limpo = title.strip()
+    if not limpo:
+        return False
+    return not re.fullmatch(r"[\dIVXLCDM]+[.)]?", limpo, flags=re.IGNORECASE)
+
+
+def _toc_milestones(toc: list, total_pages: int) -> list[tuple[int, str]]:
+    """Escolhe o nível do TOC que dá a estrutura mais útil e devolve os marcos (página inicial, título) desse nível, já ordenados."""
+    if not toc:
+        return []
+
+    # Melhor título disponível para cada página, olhando TODOS os níveis: livros
+    # costumam pôr o número do capítulo num nível e o título em outro, na mesma
+    # página ("1" no nível 4, "O que são Design e Arquitetura?" no nível 5).
+    melhor_titulo: dict[int, str] = {}
+    for nivel, titulo, pagina in ((e[0], str(e[1]), int(e[2])) for e in toc):
+        del nivel
+        pagina = max(1, min(pagina, total_pages))
+        atual = melhor_titulo.get(pagina)
+        if atual is None or (not _is_descriptive(atual) and _is_descriptive(titulo)):
+            melhor_titulo[pagina] = titulo.strip()
+
+    niveis = sorted({int(e[0]) for e in toc})
+    candidatos: list[tuple[float, int, list[int]]] = []
+    for nivel in niveis:
+        paginas = sorted(
+            {max(1, min(int(e[2]), total_pages)) for e in toc if int(e[0]) == nivel}
+        )
+        if not paginas:
+            continue
+        # Maior capítulo que esse nível produziria, como fração do livro.
+        limites = [*paginas, total_pages + 1]
+        maior = max(b - a for a, b in pairwise(limites))
+        candidatos.append((maior / total_pages, nivel, paginas))
+
+    if not candidatos:
+        return []
+
+    # Preferir o nível mais raso cujo maior capítulo caiba no limite; se nenhum
+    # couber, ficar com o que tem o menor "maior capítulo" (o mais equilibrado).
+    aceitaveis = [c for c in candidatos if c[0] <= MAX_CHAPTER_FRACTION]
+    fracao, _, paginas = (
+        min(aceitaveis, key=lambda c: c[1])
+        if aceitaveis
+        else min(candidatos, key=lambda c: c[0])
+    )
+    del fracao
+
+    return [
+        (pagina, melhor_titulo.get(pagina) or f"Capítulo {i + 1}")
+        for i, pagina in enumerate(paginas)
+    ]
+
+
+def _subdivide_oversized(
+    intervalos: list[tuple[int, int, str]], total_pages: int
+) -> list[tuple[int, int, str]]:
+    """Quebra em partes os capítulos que sozinhos cobrem uma fatia grande demais do livro, preservando o título original com sufixo."""
+    limite = max(SYNTHETIC_CHAPTER_PAGES, int(total_pages * MAX_CHAPTER_FRACTION))
+    resultado: list[tuple[int, int, str]] = []
+    for inicio, fim, titulo in intervalos:
+        paginas = fim - inicio + 1
+        if paginas <= limite:
+            resultado.append((inicio, fim, titulo))
+            continue
+        # Divide em blocos de no máximo `limite` páginas, mantendo o título.
+        parte = 1
+        cursor = inicio
+        while cursor <= fim:
+            bloco_fim = min(cursor + limite - 1, fim)
+            resultado.append((cursor, bloco_fim, f"{titulo} (parte {parte})"))
+            cursor = bloco_fim + 1
+            parte += 1
+    return resultado
 
 
 def extract_chapters(pdf_path: str) -> list[Chapter]:
