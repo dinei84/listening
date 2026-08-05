@@ -1,5 +1,7 @@
 # OS-026 — Nome amigável em vez de UUID na UI
 
+> **SUBSTITUÍDA PELA OS-033 — não executar esta OS.** Nunca chegou a ser enviada a um agente. Seu escopo foi absorvido integralmente por `docs/os/OS-033-ux-lista-e-fila.md` (seção 2.1), consolidada a pedido do dono do projeto junto com três achados de teste real que tocam os mesmos arquivos (`player/app.js`, `api/routes_books.py`). Arquivo mantido como registro histórico do que foi pedido originalmente.
+
 ## 1. Objetivo
 
 Achado em uso real: o player mostra `Livro: <uuid>` no cabeçalho, e o `localStorage` guarda só o `book_id` — ao reabrir um livro pelo campo manual ou ao voltar numa sessão salva, não há nenhum jeito visual de saber qual livro é aquele sem decorar o UUID. Esta OS troca a exibição pelo título do livro (`Book.title`), mantendo o `book_id` só como identificador técnico interno.

@@ -69,6 +69,7 @@ Na primeira vez que o worker processar um livro, o Kokoro baixa os pesos do mode
 5. Testar play/pause, trocar a velocidade (dropdown), recarregar a página (deve oferecer "Retomar de onde parou?").
 6. Pra reabrir um livro processado antes, usar o campo "Abrir livro existente" com o `id` devolvido no upload (aparece na tela e também em `GET /books/{id}/status`).
 7. **"Processar agora"** (desde a OS-032): cada livro da lista que está apenas enfileirado (`uploaded`) ou pausado (`paused`) tem esse botão. Clicar nele pausa a síntese em andamento no fim do chunk corrente (~1s) e coloca o livro escolhido no topo da fila — o livro pausado fica `paused`, com o áudio já gerado tocável, e retoma de onde parou quando for re-priorizado.
+8. **UX da lista (desde a OS-033):** o cabeçalho do player mostra o **título** do livro (não mais o UUID cru); clicar num livro da lista preenche o campo "Abrir livro existente"; um livro apenas enfileirado aparece como **"Na fila — aguardando processamento"** (o status cru `uploaded` fica só na API); e um livro `uploaded` pode ser **deletado** — só `extracting`/`processing`/`synthesizing` continuam bloqueados (409) enquanto o worker escreve.
 
 ### Testar só a API, sem o navegador
 
@@ -129,7 +130,7 @@ Trocar qualquer um desses nomes exige que a classe correspondente já esteja reg
 ## 8. Problemas comuns
 
 - **`tesseract: comando não encontrado`** — instalar via `sudo apt-get install tesseract-ocr` (passo 1). Precisa de senha interativa; não dá pra automatizar num agente sem acesso a terminal do usuário.
-- **Livro fica travado em `status: "uploaded"`** — o worker não está rodando. Ver passo 4, Terminal 2.
+- **Livro fica travado em `status: "uploaded"`** — o worker não está rodando. Ver passo 4, Terminal 2. Na UI o livro aparece como "Na fila — aguardando processamento" (OS-033) e, como o worker nunca tocou nele, pode ser deletado sem risco.
 - **Primeira síntese demora muito / aviso de "unauthenticated requests to the HF Hub"** — esperado na primeira vez que o Kokoro roda: ele baixa os pesos do modelo. Não é erro.
 - **Porta 8000 já em uso** — trocar a porta no comando do `uvicorn` (`--port 8001`, por exemplo) e ajustar a URL usada no navegador/curl de acordo.
 - **`retomada inconsistente: existem AudioChunks persistidos até a sequence N...`** — o livro tinha chunks de uma tentativa anterior que não batem com o texto re-extraído agora (o PDF mudou, ou a lógica de limpeza/chunking mudou entre as duas tentativas). O worker **não** apaga nada nesse caso: marca o livro como `error` com essa mensagem e pede reenvio. Reenviar o PDF gera um `book_id` novo e processa do zero.
