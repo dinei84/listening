@@ -198,3 +198,23 @@ def test_kokoro_speaker_explicit_voice_overrides_detected_default(pipeline_facto
     assert lang_code == "p"
     assert voice == "pm_alex"
     os.remove(chunk.file_path)
+
+
+def test_kokoro_speaker_synthesize_uses_forced_lang_code_when_given(pipeline_factory):
+    chunk = KokoroSpeaker().synthesize(EN_TEXT, lang_code="p")
+
+    lang_code, (_, voice, _) = pipeline_factory.single_call()
+    assert lang_code == "p"
+    assert voice == "pf_dora"
+    os.remove(chunk.file_path)
+
+
+def test_kokoro_speaker_synthesize_falls_back_to_detection_when_lang_code_is_none(
+    pipeline_factory,
+):
+    chunk = KokoroSpeaker().synthesize(PT_TEXT, lang_code=None)
+
+    lang_code, (_, voice, _) = pipeline_factory.single_call()
+    assert lang_code == "p"
+    assert voice == "pf_dora"
+    os.remove(chunk.file_path)

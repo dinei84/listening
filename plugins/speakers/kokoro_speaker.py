@@ -61,10 +61,14 @@ class KokoroSpeaker(Speaker):
     def cost_per_char(self) -> float:
         return 0.0
 
-    def synthesize(self, text: str, voice: str | None = None) -> AudioChunk:
-        pipeline, lang_code = self._get_pipeline(self._detect_lang_code(text))
+    def synthesize(
+        self, text: str, voice: str | None = None, lang_code: str | None = None
+    ) -> AudioChunk:
+        pipeline, effective_lang_code = self._get_pipeline(
+            lang_code if lang_code is not None else self._detect_lang_code(text)
+        )
         results = pipeline(
-            text, voice=voice or VOICE_BY_LANG_CODE[lang_code], speed=1.0
+            text, voice=voice or VOICE_BY_LANG_CODE[effective_lang_code], speed=1.0
         )
         audio_parts = [
             result.output.audio for result in results if result.output is not None

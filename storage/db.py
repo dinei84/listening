@@ -22,7 +22,8 @@ def init_db(db_path: str | None = None) -> None:
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 error_message TEXT,
-                chunk_total INTEGER
+                chunk_total INTEGER,
+                language TEXT
             )
             """)
         conn.commit()
@@ -36,8 +37,8 @@ def create_book(book: Book, db_path: str | None = None) -> None:
     try:
         conn.execute(
             "INSERT INTO books "
-            "(id, title, original_filename, status, created_at, error_message, chunk_total) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(id, title, original_filename, status, created_at, error_message, chunk_total, language) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 book.id,
                 book.title,
@@ -46,6 +47,7 @@ def create_book(book: Book, db_path: str | None = None) -> None:
                 book.created_at.isoformat(),
                 book.error_message,
                 book.chunk_total,
+                book.language,
             ),
         )
         conn.commit()
@@ -58,7 +60,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -76,6 +78,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         created_at=datetime.fromisoformat(row[4]),
         error_message=row[5],
         chunk_total=row[6],
+        language=row[7],
     )
 
 
@@ -84,7 +87,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -99,6 +102,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
             created_at=datetime.fromisoformat(row[4]),
             error_message=row[5],
             chunk_total=row[6],
+            language=row[7],
         )
         for row in rows
     ]

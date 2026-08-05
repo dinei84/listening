@@ -114,7 +114,9 @@ class Speaker(ABC):
     """Recebe texto e devolve áudio sintetizado."""
 
     @abstractmethod
-    def synthesize(self, text: str, voice: str | None = None) -> AudioChunk:
+    def synthesize(
+        self, text: str, voice: str | None = None, lang_code: str | None = None
+    ) -> AudioChunk:
         ...
 
     @property
@@ -123,6 +125,8 @@ class Speaker(ABC):
         """0.0 para engines locais. Usado para estimar custo antes de rodar."""
         ...
 ```
+
+`lang_code` foi adicionado na OS-025 como extensão aditiva do contrato (mesmo padrão das OS-021/022): força um idioma específico do engine, pulando a detecção automática; `None` preserva o comportamento anterior (para o `KokoroSpeaker`, detecção automática por chunk via `langdetect`, OS-020). O código é o do engine (`a`, `p`, `e`... no Kokoro), não o do `langdetect` — a tradução entre o que a API/UI expõe (`en`, `pt`, `es`...) e o código do engine fica a cargo de quem chama (`worker/tasks.py`, via `LANG_CODE_BY_LANGUAGE`).
 
 Regra de decisão do pipeline: usar o Speaker definido em `config.yaml` como padrão (ex: `kokoro`). Só usar um Speaker cloud quando o usuário explicitamente pedir "voz premium" para aquele livro/capítulo.
 
@@ -246,6 +250,7 @@ class Book(BaseModel):
     created_at: datetime
     error_message: str | None = None
     chunk_total: int | None = None  # total de chunks de síntese previsto (OS-024); None até a síntese começar
+    language: str | None = None  # idioma forçado no upload (código tipo langdetect: en, pt, es...); None = detecção automática (OS-025)
 
 class Job(BaseModel):
     id: str

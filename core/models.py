@@ -37,6 +37,7 @@ class Book(BaseModel):
     created_at: datetime
     error_message: str | None = None
     chunk_total: int | None = None
+    language: str | None = None
 
 
 class Job(BaseModel):

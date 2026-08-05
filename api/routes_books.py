@@ -2,11 +2,12 @@ import shutil
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from core import config as config_module
 from core.models import Book, Job
 from plugins import registry as registry_module
+from plugins.speakers.kokoro_speaker import LANG_CODE_BY_LANGUAGE
 from storage import audio_store, db, uploads
 
 router = APIRouter()
@@ -18,20 +19,25 @@ _BLOCKED_DELETE_STATUSES = {"uploaded", "extracting", "processing", "synthesizin
 
 
 @router.post("/books")
-async def create_book(file: UploadFile) -> dict[str, str]:
-    """Recebe um PDF, salva em disco, cria o Book e enfileira um Job de processamento assíncrono."""
+async def create_book(
+    file: UploadFile, language: str | None = Form(default=None)
+) -> dict[str, str]:
+    """Recebe um PDF (e um idioma opcional), salva em disco, cria o Book e enfileira um Job de processamento assíncrono."""
     book_id = str(uuid.uuid4())
     uploads.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     pdf_path = uploads.pdf_path_for(book_id)
     with pdf_path.open("wb") as destination:
         shutil.copyfileobj(file.file, destination)
 
+    # Idioma inválido/desconhecido degrada para None (detecção automática), nunca erro.
+    valid_language = language if language in LANG_CODE_BY_LANGUAGE else None
     book = Book(
         id=book_id,
         title=file.filename or book_id,
         original_filename=file.filename or "",
         status="uploaded",
         created_at=datetime.now(UTC),
+        language=valid_language,
     )
     db.create_book(book)
 

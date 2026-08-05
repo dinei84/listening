@@ -72,13 +72,15 @@ class FakeTwoPageExtractor(Extractor):
 class FakeSpeaker(Speaker):
     def __init__(self):
         self.call_count = 0
+        self.lang_codes = []
 
     @property
     def cost_per_char(self):
         return 0.0
 
-    def synthesize(self, text, voice=None):
+    def synthesize(self, text, voice=None, lang_code=None):
         self.call_count += 1
+        self.lang_codes.append(lang_code)
         return AudioChunk(
             chapter_id="",
             sequence=0,
@@ -242,9 +244,9 @@ def test_synthesize_text_calls_on_chunk_for_each_chunk(monkeypatch):
             super().__init__()
             self.received_count_at_call: list[int] = []
 
-        def synthesize(self, text, voice=None):
+        def synthesize(self, text, voice=None, lang_code=None):
             self.received_count_at_call.append(len(received))
-            return super().synthesize(text, voice)
+            return super().synthesize(text, voice, lang_code)
 
     timing_speaker = TimingSpeaker()
     monkeypatch.setattr(
@@ -310,3 +312,33 @@ def test_synthesize_text_returns_full_list_when_on_chunk_is_none(monkeypatch):
     assert [c.sequence for c in chunks] == [0, 1, 2]
     assert all(c.chapter_id == "ch1" for c in chunks)
     assert fake_speaker.call_count == 3
+
+
+def test_synthesize_text_passes_lang_code_to_speaker(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")
+    )
+    fake_speaker = FakeSpeaker()
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: fake_speaker}
+    )
+
+    text = "Sentence one. Sentence two. Sentence three."
+    pipeline.synthesize_text(text, chapter_id="ch1", max_chars=20, lang_code="p")
+
+    assert fake_speaker.lang_codes == ["p", "p", "p"]
+
+
+def test_synthesize_text_passes_none_lang_code_by_default(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")
+    )
+    fake_speaker = FakeSpeaker()
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: fake_speaker}
+    )
+
+    text = "Sentence one. Sentence two. Sentence three."
+    pipeline.synthesize_text(text, chapter_id="ch1", max_chars=20)
+
+    assert fake_speaker.lang_codes == [None, None, None]
