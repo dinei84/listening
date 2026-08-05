@@ -5,6 +5,7 @@ from core import config as config_module
 from core import pipeline
 from core.models import AudioChunk, Chapter, Job
 from plugins import registry as registry_module
+from plugins.speakers.kokoro_speaker import LANG_CODE_BY_LANGUAGE
 from storage import audio_store, db, uploads
 
 logger = logging.getLogger(__name__)
@@ -51,11 +52,13 @@ def process_job(job: Job) -> None:
         def _persist(chunk: AudioChunk) -> None:
             audio_store.persist_chunks(job.book_id, [chunk])
 
+        lang_code = LANG_CODE_BY_LANGUAGE.get(book.language) if book.language else None
         pipeline.synthesize_text(
             text,
             chapter_id=chapter.id,
             on_chunk=_persist,
             skip_sequences=already_done,
+            lang_code=lang_code,
         )
         db.update_book_status(job.book_id, "ready")
         queue.mark_done(job.id)

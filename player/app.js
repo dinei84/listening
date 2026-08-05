@@ -58,6 +58,10 @@ function saveState(bookId, sequence, currentTime) {
 async function uploadBook(file) {
   const formData = new FormData();
   formData.append("file", file);
+  const language = document.getElementById("language-select").value;
+  if (language) {
+    formData.append("language", language);
+  }
   const response = await fetch("/books", { method: "POST", body: formData });
   if (!response.ok) {
     throw new Error("Falha no upload");

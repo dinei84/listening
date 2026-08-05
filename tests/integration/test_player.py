@@ -29,4 +29,4 @@ def test_player_upload_form_has_language_select_with_auto_default(
 
     html = response.text
     assert 'id="language-select"' in html
-    assert "<option value=\"\">Automático</option>" in html
+    assert '<option value="">Automático</option>' in html

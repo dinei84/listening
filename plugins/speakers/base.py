@@ -13,6 +13,8 @@ class Speaker(ABC):
         ...
 
     @abstractmethod
-    def synthesize(self, text: str, voice: str | None = None) -> AudioChunk:
-        """Recebe texto e devolve áudio sintetizado."""
+    def synthesize(
+        self, text: str, voice: str | None = None, lang_code: str | None = None
+    ) -> AudioChunk:
+        """Recebe texto e devolve áudio sintetizado; lang_code força um idioma específico do engine, pulando a detecção automática."""
         ...

@@ -37,8 +37,9 @@ def synthesize_text(
     max_chars: int | None = None,
     on_chunk: Callable[[AudioChunk], None] | None = None,
     skip_sequences: set[int] | None = None,
+    lang_code: str | None = None,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, e as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, e as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida; lang_code força o idioma do engine em todos os chunks (None = detecção automática por chunk)."""
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     already_done = skip_sequences or set()
     pending = [
@@ -54,7 +55,7 @@ def synthesize_text(
 
     audio_chunks: list[AudioChunk] = []
     for sequence, piece in pending:
-        audio_chunk = speaker.synthesize(piece).model_copy(
+        audio_chunk = speaker.synthesize(piece, lang_code=lang_code).model_copy(
             update={"chapter_id": chapter_id, "sequence": sequence}
         )
         audio_chunks.append(audio_chunk)

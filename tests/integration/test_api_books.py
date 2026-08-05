@@ -460,7 +460,9 @@ def test_create_book_persists_chosen_language(temp_paths, fake_working_pipeline)
     assert book.language == "pt"
 
 
-def test_create_book_without_language_defaults_to_auto(temp_paths, fake_working_pipeline):
+def test_create_book_without_language_defaults_to_auto(
+    temp_paths, fake_working_pipeline
+):
     with TestClient(app) as client:
         response = client.post("/books", files=_upload_files())
 

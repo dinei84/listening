@@ -13,6 +13,21 @@
       <h2>Enviar PDF</h2>
       <form id="upload-form">
         <input type="file" id="pdf-input" accept="application/pdf" required />
+        <label>
+          Idioma:
+          <select id="language-select">
+            <option value="">Automático</option>
+            <option value="en">Inglês</option>
+            <option value="es">Espanhol</option>
+            <option value="fr">Francês</option>
+            <option value="hi">Hindi</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Português</option>
+            <option value="ja">Japonês</option>
+            <option value="zh-cn">Chinês (simplificado)</option>
+            <option value="zh-tw">Chinês (tradicional)</option>
+          </select>
+        </label>
         <button type="submit">Enviar</button>
       </form>
       <p id="upload-status"></p>
