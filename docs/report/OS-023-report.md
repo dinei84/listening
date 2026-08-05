@@ -82,4 +82,4 @@ Nenhuma.
 
 ## 8. Link do PR
 
-*A preencher após `git push` e `gh pr create`.*
+https://github.com/dinei84/listening/pull/20
