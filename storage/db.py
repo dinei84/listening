@@ -20,7 +20,8 @@ def init_db(db_path: str | None = None) -> None:
                 title TEXT NOT NULL,
                 original_filename TEXT NOT NULL,
                 status TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                error_message TEXT
             )
             """)
         conn.commit()
@@ -33,14 +34,16 @@ def create_book(book: Book, db_path: str | None = None) -> None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         conn.execute(
-            "INSERT INTO books (id, title, original_filename, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO books "
+            "(id, title, original_filename, status, created_at, error_message) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 book.id,
                 book.title,
                 book.original_filename,
                 book.status,
                 book.created_at.isoformat(),
+                book.error_message,
             ),
         )
         conn.commit()
@@ -53,7 +56,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at "
+            "SELECT id, title, original_filename, status, created_at, error_message "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -69,6 +72,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         original_filename=row[2],
         status=row[3],
         created_at=datetime.fromisoformat(row[4]),
+        error_message=row[5],
     )
 
 
@@ -77,7 +81,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at "
+            "SELECT id, title, original_filename, status, created_at, error_message "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -90,16 +94,25 @@ def list_books(db_path: str | None = None) -> list[Book]:
             original_filename=row[2],
             status=row[3],
             created_at=datetime.fromisoformat(row[4]),
+            error_message=row[5],
         )
         for row in rows
     ]
 
 
-def update_book_status(book_id: str, status: str, db_path: str | None = None) -> None:
-    """Atualiza o status de um Book existente."""
+def update_book_status(
+    book_id: str,
+    status: str,
+    db_path: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Atualiza o status (e opcionalmente a error_message) de um Book existente."""
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
-        conn.execute("UPDATE books SET status = ? WHERE id = ?", (status, book_id))
+        conn.execute(
+            "UPDATE books SET status = ?, error_message = ? WHERE id = ?",
+            (status, error_message, book_id),
+        )
         conn.commit()
     finally:
         conn.close()

@@ -29,7 +29,7 @@ def process_job(job: Job) -> None:
     # Captura ampla intencional: mesmo motivo da OS-010 (rota /books) — qualquer
     # falha do pipeline vira Book "error" + Job "failed", nunca derruba o worker.
     except Exception as exc:  # noqa: BLE001
-        db.update_book_status(job.book_id, "error")
+        db.update_book_status(job.book_id, "error", error_message=str(exc))
         queue.mark_failed(job.id, str(exc))
 
 

@@ -123,6 +123,7 @@ Trocar qualquer um desses nomes exige que a classe correspondente já esteja reg
 - **Livro fica travado em `status: "uploaded"`** — o worker não está rodando. Ver passo 4, Terminal 2.
 - **Primeira síntese demora muito / aviso de "unauthenticated requests to the HF Hub"** — esperado na primeira vez que o Kokoro roda: ele baixa os pesos do modelo. Não é erro.
 - **Porta 8000 já em uso** — trocar a porta no comando do `uvicorn` (`--port 8001`, por exemplo) e ajustar a URL usada no navegador/curl de acordo.
+- **Livros processados antes da OS-019 têm pronúncia incorreta** — até a OS-019, `KokoroSpeaker` chamava a API errada do Kokoro (`generate_from_tokens` com texto bruto, sem rodar o G2P de verdade), gerando áudio com pronúncia errada em todo livro processado desde a OS-004 (decisão #14 em `docs/PROJECT_STATE.md`). Não há reprocessamento automático — reenviar manualmente qualquer livro que já estava `ready` antes dessa correção pra gerar o áudio de novo com a pronúncia certa.
 
 ## Referências
 
