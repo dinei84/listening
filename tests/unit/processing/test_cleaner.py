@@ -42,9 +42,11 @@ def test_clean_text_handles_empty_input():
 def test_clean_text_joins_lines_that_continue_a_sentence():
     """Quebra de linha do PDF no meio da frase vira espaço, não pausa no áudio."""
     pages = [
-        "A engenharia de seguranca e um campo\n"
-        "que exige conhecimento amplo e\n"
-        "multidisciplinar constante."
+        (
+            "A engenharia de seguranca e um campo\n"
+            "que exige conhecimento amplo e\n"
+            "multidisciplinar constante."
+        )
     ]
     result = clean_text(pages)
     assert result == (
@@ -56,8 +58,10 @@ def test_clean_text_joins_lines_that_continue_a_sentence():
 def test_clean_text_preserves_paragraph_boundaries_when_joining():
     """Linha em branco separa parágrafos — essa pausa é legítima e deve sobreviver."""
     pages = [
-        "Primeiro paragrafo que continua\nna linha seguinte.\n\n"
-        "Segundo paragrafo tambem quebrado\nem duas linhas."
+        (
+            "Primeiro paragrafo que continua\nna linha seguinte.\n\n"
+            "Segundo paragrafo tambem quebrado\nem duas linhas."
+        )
     ]
     result = clean_text(pages)
     assert result == (
@@ -75,7 +79,9 @@ def test_clean_text_keeps_break_after_sentence_end():
 
 def test_clean_text_join_runs_after_hyphenation_fix():
     """Hifenização é resolvida antes da junção; palavra partida não vira duas."""
-    pages = ["Isto e uma demons-\ntracao de hifenizacao que continua\nna proxima linha."]
+    pages = [
+        "Isto e uma demons-\ntracao de hifenizacao que continua\nna proxima linha."
+    ]
     result = clean_text(pages)
     assert result == (
         "Isto e uma demonstracao de hifenizacao que continua na proxima linha."
