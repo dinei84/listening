@@ -28,12 +28,37 @@ let currentIndex = 0;
 // cresce durante a síntese e o índice do mesmo trecho pode mudar quando ela cresce.
 let currentSequence = null;
 let currentBookId = null;
+let currentBookTitle = null;
 let pollTimer = null;
 let lastSaveTime = 0;
 let pendingResume = null;
 let playbackStarted = false;
 let waitingForNextChunk = false;
 let bookStatus = null;
+
+// Vocabulário de status para a UI (OS-033): os valores da API continuam crus no
+// modelo (Book.status), só a exibição traduz. "uploaded" = Job enfileirado,
+// ainda não tocado pelo worker.
+function statusLabel(status) {
+  switch (status) {
+    case "uploaded":
+      return "Na fila — aguardando processamento";
+    case "extracting":
+      return "Extraindo";
+    case "processing":
+      return "Processando";
+    case "synthesizing":
+      return "Sintetizando";
+    case "ready":
+      return "Pronto";
+    case "error":
+      return "Erro";
+    case "paused":
+      return "Pausado";
+    default:
+      return status;
+  }
+}
 
 function loadSavedState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -45,13 +70,13 @@ function loadSavedState() {
   }
 }
 
-function saveState(bookId, sequence, currentTime) {
+function saveState(bookId, sequence, currentTime, title) {
   const now = Date.now();
   if (now - lastSaveTime < SAVE_THROTTLE_MS) return;
   lastSaveTime = now;
   localStorage.setItem(
     STORAGE_KEY,
-    JSON.stringify({ bookId, sequence, currentTime })
+    JSON.stringify({ bookId, sequence, currentTime, title })
   );
 }
 
@@ -119,7 +144,7 @@ function renderBooksList(books) {
   for (const book of books) {
     const li = document.createElement("li");
     const label = document.createElement("span");
-    label.textContent = `${book.title} — ${book.status} — ${formatCreatedAt(book.created_at)}`;
+    label.textContent = `${book.title} — ${statusLabel(book.status)} — ${formatCreatedAt(book.created_at)}`;
 
     const prioritizeBtn = document.createElement("button");
     prioritizeBtn.type = "button";
@@ -144,7 +169,10 @@ function renderBooksList(books) {
     });
 
     li.dataset.bookId = book.id;
-    li.addEventListener("click", () => openBook(book.id, null));
+    li.addEventListener("click", () => {
+      bookIdInput.value = book.id;
+      openBook(book.id, null, book.title);
+    });
     li.appendChild(label);
     li.appendChild(prioritizeBtn);
     li.appendChild(deleteBtn);
@@ -159,7 +187,16 @@ async function deleteBook(bookId) {
   try {
     const response = await fetch(`/books/${bookId}`, { method: "DELETE" });
     if (!response.ok) {
-      throw new Error("Falha ao deletar o livro");
+      // Mostra o motivo real que a API mandou (ex: "Book is still processing"),
+      // com a mensagem genérica só como fallback quando não houver detail.
+      let message = "Falha ao deletar o livro";
+      try {
+        const data = await response.json();
+        if (data && data.detail) message = data.detail;
+      } catch (err) {
+        // mantém a mensagem padrão
+      }
+      throw new Error(message);
     }
     if (currentBookId === bookId) {
       resetPlaybackState();
@@ -233,7 +270,7 @@ function statusMessage(status, chunksDone, chunksTotal) {
 
   const progress =
     chunksTotal === null || chunksTotal === undefined
-      ? `Status: ${status}`
+      ? `Status: ${statusLabel(status)}`
       : `Sintetizando: ${chunksDone} de ${chunksTotal} chunks`;
   return chunks.length > 0 ? `${progress} — tocando o que já está pronto` : progress;
 }
@@ -274,6 +311,12 @@ async function pollBook(bookId) {
   if (bookId !== currentBookId) return;
 
   bookStatus = statusData.status;
+  // O título chega no status para aberturas por campo manual ou sessão restaurada
+  // sem title salvo; a abertura pela lista já setou o título em mãos em openBook().
+  if (statusData.title) {
+    currentBookTitle = statusData.title;
+    playerTitle.textContent = `Livro: ${statusData.title}`;
+  }
   renderSynthesisProgress(
     bookStatus,
     statusData.chunks_done,
@@ -336,6 +379,7 @@ function resetPlaybackState() {
   chunks = [];
   currentIndex = 0;
   currentSequence = null;
+  currentBookTitle = null;
   playbackStarted = false;
   waitingForNextChunk = false;
   bookStatus = null;
@@ -344,14 +388,20 @@ function resetPlaybackState() {
   synthesisProgress.hidden = true;
 }
 
-async function openBook(bookId, resumeState) {
+async function openBook(bookId, resumeState, title) {
   resetPlaybackState();
   currentBookId = bookId;
   if (resumeState && resumeState.bookId === bookId) {
     pendingResume = resumeState;
+    // Sessão restaurada do localStorage pode já carregar o título salvo — sem
+    // precisar esperar o primeiro poll.
+    if (resumeState.title) {
+      currentBookTitle = resumeState.title;
+    }
   }
   playerSection.hidden = false;
-  playerTitle.textContent = `Livro: ${bookId}`;
+  const knownTitle = title || currentBookTitle;
+  playerTitle.textContent = knownTitle ? `Livro: ${knownTitle}` : `Livro: ${bookId}`;
   playerStatus.textContent = "Verificando status...";
 
   // Desde a OS-021 o áudio é persistido chunk a chunk e `GET /books/{id}/audio`
@@ -406,7 +456,8 @@ audioPlayer.addEventListener("timeupdate", () => {
     saveState(
       currentBookId,
       chunks[currentIndex].sequence,
-      audioPlayer.currentTime
+      audioPlayer.currentTime,
+      currentBookTitle
     );
   }
 });

@@ -151,6 +151,18 @@ def test_get_books_status_returns_persisted_status(temp_paths, fake_working_pipe
     assert status_response.json()["status"] == "uploaded"
 
 
+def test_get_books_status_returns_title(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        status_response = client.get(f"/books/{book_id}/status")
+
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert body["title"] == "book.pdf"
+
+
 def test_get_books_status_returns_404_for_unknown_id(temp_paths):
     with TestClient(app) as client:
         response = client.get("/books/does-not-exist/status")
@@ -422,6 +434,38 @@ def test_delete_book_returns_409_while_processing(temp_paths, fake_working_pipel
     with TestClient(app) as client:
         create_response = client.post("/books", files=_upload_files())
         book_id = create_response.json()["id"]
+        db_module.update_book_status(book_id, "processing")
+
+        response = client.delete(f"/books/{book_id}")
+
+    assert response.status_code == 409
+    assert db_module.get_book(book_id) is not None
+
+
+def test_delete_book_allowed_when_uploaded(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        job = queue.get_job_for_book(book_id)
+        assert job is not None
+        assert uploads_module.pdf_path_for(book_id).exists()
+
+        response = client.delete(f"/books/{book_id}")
+
+        assert response.status_code == 200
+        assert db_module.get_book(book_id) is None
+        assert queue.get_job_for_book(book_id) is None
+        assert not uploads_module.pdf_path_for(book_id).exists()
+
+
+def test_delete_book_still_blocked_while_synthesizing(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+        db_module.update_book_status(book_id, "synthesizing")
 
         response = client.delete(f"/books/{book_id}")
 
