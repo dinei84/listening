@@ -105,4 +105,4 @@ Nenhum bloqueio. Decisões de implementação que a OS deixou em aberto e como f
 
 ## 7. Link do PR
 
-A preencher após abertura do PR.
+https://github.com/dinei84/listening/pull/25
