@@ -229,3 +229,54 @@ def test_synthesize_text_returns_empty_list_for_empty_text_without_calling_speak
 
     assert result == []
     assert fake_speaker.call_count == 0
+
+
+def test_synthesize_text_calls_on_chunk_for_each_chunk(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")
+    )
+    received: list[AudioChunk] = []
+
+    class TimingSpeaker(FakeSpeaker):
+        def __init__(self):
+            super().__init__()
+            self.received_count_at_call: list[int] = []
+
+        def synthesize(self, text, voice=None):
+            self.received_count_at_call.append(len(received))
+            return super().synthesize(text, voice)
+
+    timing_speaker = TimingSpeaker()
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: timing_speaker}
+    )
+
+    text = "Sentence one. Sentence two. Sentence three."
+    chunks = pipeline.synthesize_text(
+        text, chapter_id="ch1", max_chars=20, on_chunk=received.append
+    )
+
+    assert len(received) == 3
+    assert [c.sequence for c in received] == [0, 1, 2]
+    assert all(c.chapter_id == "ch1" for c in received)
+    assert received == chunks
+    # Cada on_chunk disparou antes da síntese do chunk seguinte.
+    assert timing_speaker.received_count_at_call == [0, 1, 2]
+
+
+def test_synthesize_text_returns_full_list_when_on_chunk_is_none(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")
+    )
+    fake_speaker = FakeSpeaker()
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: fake_speaker}
+    )
+
+    text = "Sentence one. Sentence two. Sentence three."
+    chunks = pipeline.synthesize_text(text, chapter_id="ch1", max_chars=20)
+
+    assert len(chunks) == 3
+    assert [c.sequence for c in chunks] == [0, 1, 2]
+    assert all(c.chapter_id == "ch1" for c in chunks)
+    assert fake_speaker.call_count == 3

@@ -267,3 +267,85 @@ def test_get_books_endpoint_returns_empty_list_when_no_books(temp_paths):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_get_books_audio_returns_partial_chunks_while_synthesizing(
+    temp_paths, monkeypatch
+):
+    MULTI_CHUNK_TEXT = "A" * 599 + ". " + "B" * 599 + ". " + "C" * 599 + "."
+
+    class MultiChunkExtractor(Extractor):
+        def supports(self, pdf_path):
+            return True
+
+        def extract(self, pdf_path, page_range=None):
+            return [
+                ExtractedPage(
+                    page_number=1,
+                    text=MULTI_CHUNK_TEXT,
+                    confidence=1.0,
+                    source="multi_chunk",
+                )
+            ]
+
+    observations: dict = {}
+
+    class ObservingSpeaker(Speaker):
+        def __init__(self, client, book_id):
+            self.call_count = 0
+            self._client = client
+            self._book_id = book_id
+
+        @property
+        def cost_per_char(self):
+            return 0.0
+
+        def synthesize(self, text, voice=None):
+            self.call_count += 1
+            if self.call_count == 2:
+                observations["status"] = self._client.get(
+                    f"/books/{self._book_id}/status"
+                )
+                observations["audio"] = self._client.get(
+                    f"/books/{self._book_id}/audio"
+                )
+            fd, path = tempfile.mkstemp(suffix=".wav")
+            with os.fdopen(fd, "wb") as f:
+                f.write(b"RIFF-fake-wav-bytes")
+            return AudioChunk(
+                chapter_id="",
+                sequence=0,
+                file_path=path,
+                duration_seconds=1.0,
+                engine_used="observing_speaker",
+            )
+
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        speaker = ObservingSpeaker(client, book_id)
+        monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+        monkeypatch.setattr(
+            registry_module,
+            "EXTRACTORS",
+            {"fake_extractor": MultiChunkExtractor},
+        )
+        monkeypatch.setattr(
+            registry_module,
+            "SPEAKERS",
+            {"fake_speaker": lambda: speaker},
+        )
+
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        job = queue.claim_next()
+        worker_tasks.process_job(job)
+
+        assert observations["status"].json()["status"] == "synthesizing"
+        mid_audio = observations["audio"].json()
+        assert len(mid_audio) == 1
+        assert mid_audio[0]["sequence"] == 0
+
+        final_response = client.get(f"/books/{book_id}/audio")
+    assert len(final_response.json()) == 3
+    assert final_response.json()[2]["sequence"] == 2

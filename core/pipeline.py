@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from core import config as config_module
 from core.models import AudioChunk, ExtractedPage
 from plugins import registry as registry_module
@@ -24,9 +26,12 @@ def extract_clean_text(pdf_path: str) -> str:
 
 
 def synthesize_text(
-    text: str, chapter_id: str, max_chars: int | None = None
+    text: str,
+    chapter_id: str,
+    max_chars: int | None = None,
+    on_chunk: Callable[[AudioChunk], None] | None = None,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado, devolvendo um AudioChunk por chunk com sequence incremental e chapter_id preenchido."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo."""
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     if not chunks:
         return []
@@ -36,10 +41,10 @@ def synthesize_text(
 
     audio_chunks: list[AudioChunk] = []
     for sequence, piece in enumerate(chunks):
-        audio_chunk = speaker.synthesize(piece)
-        audio_chunks.append(
-            audio_chunk.model_copy(
-                update={"chapter_id": chapter_id, "sequence": sequence}
-            )
+        audio_chunk = speaker.synthesize(piece).model_copy(
+            update={"chapter_id": chapter_id, "sequence": sequence}
         )
+        audio_chunks.append(audio_chunk)
+        if on_chunk is not None:
+            on_chunk(audio_chunk)
     return audio_chunks

@@ -66,6 +66,55 @@ class FakeSpeaker(Speaker):
         )
 
 
+# Três "sentenças" de 600 caracteres cada: com max_chars=1000 nenhuma cabe
+# junto de outra, então o chunker produz exatamente 3 chunks.
+MULTI_CHUNK_TEXT = "A" * 599 + ". " + "B" * 599 + ". " + "C" * 599 + "."
+
+
+class MultiChunkExtractor(Extractor):
+    def supports(self, pdf_path):
+        return True
+
+    def extract(self, pdf_path, page_range=None):
+        return [
+            ExtractedPage(
+                page_number=1,
+                text=MULTI_CHUNK_TEXT,
+                confidence=1.0,
+                source="multi_chunk_extractor",
+            )
+        ]
+
+
+class RecordingSpeaker(Speaker):
+    """Speaker dublê que registra, a cada síntese, quantos chunks já estão no banco e o status do Book."""
+
+    def __init__(self, book_id):
+        self.book_id = book_id
+        self.chunks_in_db_at_call = []
+        self.statuses_at_call = []
+
+    @property
+    def cost_per_char(self):
+        return 0.0
+
+    def synthesize(self, text, voice=None):
+        self.chunks_in_db_at_call.append(
+            len(audio_store_module.list_chunks(self.book_id))
+        )
+        self.statuses_at_call.append(db_module.get_book(self.book_id).status)
+        fd, path = tempfile.mkstemp(suffix=".wav")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"RIFF-fake-wav-bytes")
+        return AudioChunk(
+            chapter_id="",
+            sequence=0,
+            file_path=path,
+            duration_seconds=1.0,
+            engine_used="recording_speaker",
+        )
+
+
 @pytest.fixture
 def temp_paths(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
@@ -167,3 +216,50 @@ def test_worker_process_job_persists_audio_chunks(temp_paths, fake_working_pipel
     assert len(chunks) == 1
     assert chunks[0].sequence == 0
     assert os.path.exists(chunks[0].file_path)
+
+
+def test_worker_process_job_persists_chunks_incrementally(
+    temp_paths, monkeypatch
+):
+    book = _create_book_and_pdf(temp_paths)
+    speaker = RecordingSpeaker(book.id)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker}
+    )
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert speaker.chunks_in_db_at_call == [0, 1, 2]
+    chunks = audio_store_module.list_chunks(book.id)
+    assert len(chunks) == 3
+    assert db_module.get_book(book.id).status == "ready"
+
+
+def test_worker_process_job_sets_book_status_to_synthesizing_before_ready(
+    temp_paths, monkeypatch
+):
+    book = _create_book_and_pdf(temp_paths)
+    speaker = RecordingSpeaker(book.id)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker}
+    )
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert len(speaker.statuses_at_call) == 3
+    assert all(s == "synthesizing" for s in speaker.statuses_at_call)
+    assert db_module.get_book(book.id).status == "ready"
