@@ -14,7 +14,7 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Fase:** OS-022 concluída — `JobQueue` ganhou `requeue_orphaned()` (extensão aditiva do contrato da OS-011, decisão #15); `run_worker()` devolve para a fila todo `Job` preso em `running` antes de começar o polling, e `process_job()` pula as `sequence`s já persistidas por uma tentativa anterior, com checagem explícita de consistência entre o texto re-chunkado e o que já está no banco. Interromper o worker no meio de um livro grande deixou de perder o trabalho já feito. Ver `docs/report/OS-022-report.md`.
 
-**Última OS concluída:** OS-022 — retomar processamento interrompido. PR a abrir (empilhado sobre o PR #18 da OS-021, ainda não mergeado).
+**Última OS concluída:** OS-022 — retomar processamento interrompido. PR #19 mergeado em `main` (depois do PR #18 da OS-021, também mergeado). Branches `os/021-entrega-incremental-audio` e `os/022-retomar-processamento` apagadas (local e remoto) após o merge.
 
 **OS em andamento:** nenhuma. OS-020 e OS-021 concluídas (achados registrados na seção 6 e no componente `plugins/speakers/kokoro_speaker.py`/`core/pipeline.py` abaixo).
 
