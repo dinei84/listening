@@ -450,3 +450,106 @@ def test_worker_process_job_passes_none_lang_code_without_book_language(
 
     assert speaker.lang_codes == [None, None, None]
     assert db_module.get_book(book.id).status == "ready"
+
+
+def _enqueue_higher_priority_competitor(queue, upload_dir):
+    """Cria um segundo livro cujo Job tem prioridade maior que a do Job atual, forçando a preempção cooperativa."""
+    competitor = _create_book_and_pdf(upload_dir, book_id="book-2")
+    competitor_job = Job(
+        id="job-2", book_id=competitor.id, stage="process", status="queued"
+    )
+    queue.enqueue(competitor_job)
+    queue.prioritize("job-2")
+
+
+def test_worker_process_job_yields_when_higher_priority_arrives(
+    temp_paths, fake_multi_chunk_pipeline
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    _enqueue_higher_priority_competitor(queue, temp_paths)
+
+    worker_tasks.process_job(job)
+
+    assert len(speaker.synthesized_texts) == 1
+    assert speaker.synthesized_texts[0].startswith("A")
+    assert db_module.get_book(book.id).status == "paused"
+
+
+def test_worker_yield_requeues_job_without_marking_failed(
+    temp_paths, fake_multi_chunk_pipeline
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    _enqueue_higher_priority_competitor(queue, temp_paths)
+
+    worker_tasks.process_job(job)
+
+    fetched = queue.get_job(job.id)
+    assert fetched.status == "queued"
+    assert fetched.status != "failed"
+    assert fetched.error_message is None
+    assert db_module.get_book(book.id).status != "error"
+
+
+def test_worker_yield_sets_book_status_to_paused_and_keeps_chunks(
+    temp_paths, fake_multi_chunk_pipeline
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    _enqueue_higher_priority_competitor(queue, temp_paths)
+
+    worker_tasks.process_job(job)
+
+    assert db_module.get_book(book.id).status == "paused"
+    chunks = audio_store_module.list_chunks(book.id)
+    assert len(chunks) == 1
+    assert chunks[0].sequence == 0
+    assert os.path.exists(chunks[0].file_path)
+
+
+def test_worker_resumes_paused_book_without_resynthesizing(
+    temp_paths, fake_multi_chunk_pipeline
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    _enqueue_higher_priority_competitor(queue, temp_paths)
+
+    worker_tasks.process_job(job)
+    assert db_module.get_book(book.id).status == "paused"
+
+    queue.mark_done("job-2")
+    worker_tasks.process_job(job)
+
+    assert db_module.get_book(book.id).status == "ready"
+    assert queue.get_job(job.id).status == "done"
+    assert [c.sequence for c in audio_store_module.list_chunks(book.id)] == [0, 1, 2]
+    assert [text[0] for text in speaker.synthesized_texts] == ["A", "B", "C"]
+
+
+def test_worker_process_job_completes_when_no_higher_priority_job(
+    temp_paths, fake_multi_chunk_pipeline
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert db_module.get_book(book.id).status == "ready"
+    assert queue.get_job(job.id).status == "done"
+    assert len(speaker.synthesized_texts) == 3
