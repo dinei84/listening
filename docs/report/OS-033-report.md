@@ -124,4 +124,4 @@ Nenhum bloqueio. Uma observação, sem decisão de arquitetura deste agente: o t
 
 ## 8. Link do PR
 
-A preencher após abertura do PR.
+https://github.com/dinei84/listening/pull/26
