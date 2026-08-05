@@ -148,3 +148,116 @@ def test_sqlite_queue_delete_jobs_for_book_is_noop_for_unknown_book(tmp_path):
     queue.delete_jobs_for_book("book-unknown")
 
     assert queue.get_job("job-1") is not None
+
+
+def test_sqlite_queue_claim_next_keeps_fifo_when_no_priority_set(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+
+    first = queue.claim_next()
+    second = queue.claim_next()
+
+    assert first.id == "job-1"
+    assert second.id == "job-2"
+
+
+def test_sqlite_queue_prioritize_makes_job_claimed_first(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+
+    queue.prioritize("job-2")
+
+    first = queue.claim_next()
+    second = queue.claim_next()
+    assert first.id == "job-2"
+    assert second.id == "job-1"
+
+
+def test_sqlite_queue_prioritize_priority_strictly_greater_than_running(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+    queue.prioritize("job-1")
+    queue.claim_next()
+
+    queue.prioritize("job-2")
+
+    assert queue.get_job("job-2").priority > queue.get_job("job-1").priority
+    assert queue.should_yield("job-1") is True
+
+
+def test_sqlite_queue_should_yield_true_when_higher_priority_queued(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+    queue.prioritize("job-2")
+
+    assert queue.should_yield("job-1") is True
+
+
+def test_sqlite_queue_should_yield_false_when_no_higher_priority(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+
+    assert queue.should_yield("job-1") is False
+
+
+def test_sqlite_queue_should_yield_false_for_unknown_job(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+
+    assert queue.should_yield("does-not-exist") is False
+
+
+def test_sqlite_queue_get_job_returns_priority(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+
+    queue.prioritize("job-1")
+
+    assert queue.get_job("job-1").priority == 1
+
+
+def test_sqlite_queue_requeue_preserves_priority(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.prioritize("job-1")
+    queue.claim_next()
+
+    queue.requeue("job-1")
+
+    fetched = queue.get_job("job-1")
+    assert fetched.status == "queued"
+    assert fetched.priority == 1
+
+
+def test_sqlite_queue_requeue_does_not_affect_other_jobs(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+    queue.claim_next()
+
+    queue.requeue("job-1")
+
+    assert queue.get_job("job-2").status == "queued"
+    assert queue.get_job("job-1").status == "queued"
+
+
+def test_sqlite_queue_get_job_for_book_returns_most_recent_job(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1", book_id="book-a"))
+    queue.enqueue(_job("job-2", book_id="book-a"))
+
+    job = queue.get_job_for_book("book-a")
+
+    assert job is not None
+    assert job.id == "job-2"
+
+
+def test_sqlite_queue_get_job_for_book_returns_none_for_unknown_book(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1", book_id="book-a"))
+
+    assert queue.get_job_for_book("book-unknown") is None

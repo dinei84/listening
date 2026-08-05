@@ -483,3 +483,81 @@ def test_create_book_with_invalid_language_falls_back_to_auto(
     assert response.status_code == 200
     book = db_module.get_book(response.json()["id"])
     assert book.language is None
+
+
+def test_post_books_prioritize_returns_404_for_unknown_book(temp_paths):
+    with TestClient(app) as client:
+        response = client.post("/books/does-not-exist/prioritize")
+
+    assert response.status_code == 404
+
+
+def test_post_books_prioritize_makes_queued_book_claimed_next(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        client.post("/books", files=_upload_files())
+        second = client.post("/books", files=_upload_files()).json()["id"]
+
+        response = client.post(f"/books/{second}/prioritize")
+
+        assert response.status_code == 200
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        claimed = queue.claim_next()
+        assert claimed.book_id == second
+        assert queue.get_job(claimed.id).priority > 0
+
+
+def test_post_books_prioritize_returns_409_for_ready_book(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        book_id = _create_and_process_book(client)
+
+        response = client.post(f"/books/{book_id}/prioritize")
+
+    assert response.status_code == 409
+
+
+def test_post_books_prioritize_returns_404_when_book_has_no_job(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        queue.delete_jobs_for_book(book_id)
+
+        response = client.post(f"/books/{book_id}/prioritize")
+
+    assert response.status_code == 404
+
+
+def test_post_books_prioritize_pushes_paused_book_to_front(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+        db_module.update_book_status(book_id, "paused")
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        job = queue.get_job_for_book(book_id)
+        assert job.status == "queued"
+
+        response = client.post(f"/books/{book_id}/prioritize")
+
+        assert response.status_code == 200
+        claimed = queue.claim_next()
+        assert claimed.book_id == book_id
+
+
+def test_delete_book_allowed_when_paused(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+        db_module.update_book_status(book_id, "paused")
+
+        response = client.delete(f"/books/{book_id}")
+
+        assert response.status_code == 200
+        assert db_module.get_book(book_id) is None

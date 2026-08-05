@@ -31,7 +31,13 @@ class Book(BaseModel):
     title: str
     original_filename: str
     status: Literal[
-        "uploaded", "extracting", "processing", "synthesizing", "ready", "error"
+        "uploaded",
+        "extracting",
+        "processing",
+        "synthesizing",
+        "ready",
+        "error",
+        "paused",
     ]
     chapters: list[Chapter] = []
     created_at: datetime
@@ -46,3 +52,4 @@ class Job(BaseModel):
     stage: Literal["extract", "process", "synthesize"]
     status: Literal["queued", "running", "done", "failed"]
     error_message: str | None = None
+    priority: int = 0

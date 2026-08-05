@@ -181,6 +181,26 @@ class JobQueue(ABC):
     def delete_jobs_for_book(self, book_id: str) -> None:
         """Remove todos os Jobs de um book_id. Nenhum efeito se não houver Jobs."""
         ...
+
+    @abstractmethod
+    def prioritize(self, job_id: str) -> None:
+        """Dá ao Job uma prioridade maior que a de qualquer outro Job pendente (queued ou running)."""
+        ...
+
+    @abstractmethod
+    def should_yield(self, job_id: str) -> bool:
+        """Devolve True se existe um Job 'queued' com prioridade maior que a do Job informado."""
+        ...
+
+    @abstractmethod
+    def requeue(self, job_id: str) -> None:
+        """Devolve um Job individual para 'queued', preservando a prioridade."""
+        ...
+
+    @abstractmethod
+    def get_job_for_book(self, book_id: str) -> Job | None:
+        """Busca o Job de um book_id (o mais recente). None se o livro não tiver Job."""
+        ...
 ```
 
 Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, resolvida via `registry`/`config` (mesma regra da seção 4.4) — nunca importa `SQLiteJobQueue` diretamente.
@@ -188,6 +208,8 @@ Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, reso
 `requeue_orphaned()` foi adicionado na OS-022 como extensão aditiva do contrato original da OS-011 — nada foi removido ou alterado, mas toda implementação de `JobQueue` precisa passar a tê-lo. **Limitação conhecida e aceita:** o método assume um único worker ativo por vez. Com dois workers rodando ao mesmo tempo, o segundo a iniciar devolveria para a fila o Job que o primeiro está processando de verdade. Resolver isso exigiria heartbeat/lease por `Job` — fora do escopo de um projeto pessoal com um worker só (ver `docs/os/OS-022-retomar-processamento.md` seção 2).
 
 `delete_jobs_for_book()` foi adicionado na OS-023 como extensão aditiva — usado pelo `DELETE /books/{id}` para limpar os `Job`s de um livro apagado. Mesmo padrão do `requeue_orphaned()`: nada existente muda de comportamento.
+
+`prioritize()`, `should_yield()`, `requeue()` e `get_job_for_book()` foram adicionados na OS-032 (preempção de fila, "Processar agora"), mesma extensão aditiva. `claim_next()` ordena por `priority DESC, rowid` — sem prioridade definida (tudo `0`), o comportamento é idêntico ao FIFO original. A preempção é **cooperativa** (decisão #21): o worker pergunta `should_yield(job_id)` entre um chunk e outro e, se `True`, devolve o próprio `Job` para `queued` via `requeue()` (preservando a prioridade) e marca o `Book` como `paused` — nada é apagado, a retomada continua de onde parou via `skip_sequences` da OS-022. `get_job_for_book()` é usado pelo `POST /books/{id}/prioritize` para localizar o `Job` de um livro.
 
 ### 4.4 Registro de plugins
 
@@ -245,7 +267,7 @@ class Book(BaseModel):
     id: str
     title: str
     original_filename: str
-    status: str                    # uploaded | extracting | processing | synthesizing | ready | error
+    status: str                    # uploaded | extracting | processing | synthesizing | ready | error | paused
     chapters: list[Chapter] = []
     created_at: datetime
     error_message: str | None = None
@@ -258,6 +280,7 @@ class Job(BaseModel):
     stage: str                     # extract | process | synthesize
     status: str                    # queued | running | done | failed
     error_message: str | None = None
+    priority: int = 0              # maior número = atendido primeiro (OS-032)
 ```
 
 ---

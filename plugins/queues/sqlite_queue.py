@@ -23,7 +23,8 @@ class SQLiteJobQueue(JobQueue):
                     book_id TEXT NOT NULL,
                     stage TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    error_message TEXT
+                    error_message TEXT,
+                    priority INTEGER NOT NULL DEFAULT 0
                 )
                 """)
             conn.commit()
@@ -35,22 +36,22 @@ class SQLiteJobQueue(JobQueue):
         conn = self._connect()
         try:
             conn.execute(
-                "INSERT INTO jobs (id, book_id, stage, status, error_message) "
-                "VALUES (?, ?, ?, 'queued', ?)",
-                (job.id, job.book_id, job.stage, job.error_message),
+                "INSERT INTO jobs (id, book_id, stage, status, error_message, priority) "
+                "VALUES (?, ?, ?, 'queued', ?, ?)",
+                (job.id, job.book_id, job.stage, job.error_message, job.priority),
             )
             conn.commit()
         finally:
             conn.close()
 
     def claim_next(self) -> Job | None:
-        """Reivindica atomicamente o próximo Job 'queued', marcando como 'running'."""
+        """Reivindica atomicamente o próximo Job 'queued' por prioridade (maior primeiro, desempate por inserção), marcando como 'running'."""
         conn = self._connect()
         try:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT id, book_id, stage, error_message FROM jobs "
-                "WHERE status = 'queued' ORDER BY rowid LIMIT 1"
+                "SELECT id, book_id, stage, error_message, priority FROM jobs "
+                "WHERE status = 'queued' ORDER BY priority DESC, rowid LIMIT 1"
             ).fetchone()
             if row is None:
                 conn.rollback()
@@ -69,6 +70,7 @@ class SQLiteJobQueue(JobQueue):
             stage=row[2],
             status="running",
             error_message=row[3],
+            priority=row[4],
         )
 
     def mark_done(self, job_id: str) -> None:
@@ -98,7 +100,7 @@ class SQLiteJobQueue(JobQueue):
         try:
             conn.execute("BEGIN IMMEDIATE")
             rows = conn.execute(
-                "SELECT id, book_id, stage, error_message FROM jobs "
+                "SELECT id, book_id, stage, error_message, priority FROM jobs "
                 "WHERE status = 'running' ORDER BY rowid"
             ).fetchall()
             if not rows:
@@ -116,6 +118,7 @@ class SQLiteJobQueue(JobQueue):
                 stage=row[2],
                 status="queued",
                 error_message=row[3],
+                priority=row[4],
             )
             for row in rows
         ]
@@ -125,7 +128,7 @@ class SQLiteJobQueue(JobQueue):
         conn = self._connect()
         try:
             row = conn.execute(
-                "SELECT id, book_id, stage, status, error_message "
+                "SELECT id, book_id, stage, status, error_message, priority "
                 "FROM jobs WHERE id = ?",
                 (job_id,),
             ).fetchone()
@@ -141,6 +144,7 @@ class SQLiteJobQueue(JobQueue):
             stage=row[2],
             status=row[3],
             error_message=row[4],
+            priority=row[5],
         )
 
     def delete_jobs_for_book(self, book_id: str) -> None:
@@ -151,3 +155,66 @@ class SQLiteJobQueue(JobQueue):
             conn.commit()
         finally:
             conn.close()
+
+    def prioritize(self, job_id: str) -> None:
+        """Dá ao Job uma prioridade maior que a de qualquer outro Job pendente (queued ou running)."""
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs"
+            ).fetchone()
+            conn.execute("UPDATE jobs SET priority = ? WHERE id = ?", (row[0], job_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def should_yield(self, job_id: str) -> bool:
+        """Devolve True se existe um Job 'queued' com prioridade maior que a do Job informado."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT priority FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            higher = conn.execute(
+                "SELECT 1 FROM jobs WHERE status = 'queued' AND priority > ? LIMIT 1",
+                (row[0],),
+            ).fetchone()
+            return higher is not None
+        finally:
+            conn.close()
+
+    def requeue(self, job_id: str) -> None:
+        """Devolve um Job individual para 'queued', preservando a prioridade."""
+        conn = self._connect()
+        try:
+            conn.execute("UPDATE jobs SET status = 'queued' WHERE id = ?", (job_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_job_for_book(self, book_id: str) -> Job | None:
+        """Busca o Job de um book_id (o mais recente). None se o livro não tiver Job."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT id, book_id, stage, status, error_message, priority "
+                "FROM jobs WHERE book_id = ? ORDER BY rowid DESC LIMIT 1",
+                (book_id,),
+            ).fetchone()
+        finally:
+            conn.close()
+
+        if row is None:
+            return None
+
+        return Job(
+            id=row[0],
+            book_id=row[1],
+            stage=row[2],
+            status=row[3],
+            error_message=row[4],
+            priority=row[5],
+        )

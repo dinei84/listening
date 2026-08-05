@@ -91,6 +91,27 @@ function formatCreatedAt(isoString) {
   return date.toLocaleString();
 }
 
+function canPrioritize(status) {
+  // Só faz sentido "Processar agora" em livro que ainda está esperando na fila
+  // (uploaded) ou que foi pausado para dar lugar a outro — num livro pronto,
+  // falho ou em processamento ativo não há o que priorizar.
+  return status === "uploaded" || status === "paused";
+}
+
+async function prioritizeBook(bookId) {
+  const response = await fetch(`/books/${bookId}/prioritize`, { method: "POST" });
+  if (!response.ok) {
+    let message = "Falha ao priorizar o livro";
+    try {
+      const data = await response.json();
+      if (data && data.detail) message = data.detail;
+    } catch (err) {
+      // mantém a mensagem padrão
+    }
+    throw new Error(message);
+  }
+}
+
 function renderBooksList(books) {
   booksList.innerHTML = "";
   booksListEmpty.hidden = books.length > 0;
@@ -99,6 +120,20 @@ function renderBooksList(books) {
     const li = document.createElement("li");
     const label = document.createElement("span");
     label.textContent = `${book.title} — ${book.status} — ${formatCreatedAt(book.created_at)}`;
+
+    const prioritizeBtn = document.createElement("button");
+    prioritizeBtn.type = "button";
+    prioritizeBtn.textContent = "Processar agora";
+    prioritizeBtn.disabled = !canPrioritize(book.status);
+    prioritizeBtn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await prioritizeBook(book.id);
+        refreshBooksList();
+      } catch (err) {
+        window.alert(`Erro ao priorizar: ${err.message}`);
+      }
+    });
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -111,6 +146,7 @@ function renderBooksList(books) {
     li.dataset.bookId = book.id;
     li.addEventListener("click", () => openBook(book.id, null));
     li.appendChild(label);
+    li.appendChild(prioritizeBtn);
     li.appendChild(deleteBtn);
     booksList.appendChild(li);
   }
@@ -164,7 +200,12 @@ function stopPolling() {
 }
 
 function renderSynthesisProgress(status, chunksDone, chunksTotal) {
-  if (chunksTotal === null || chunksTotal === undefined || status === "ready") {
+  if (
+    chunksTotal === null ||
+    chunksTotal === undefined ||
+    status === "ready" ||
+    status === "paused"
+  ) {
     synthesisProgress.hidden = true;
     return;
   }
@@ -174,6 +215,11 @@ function renderSynthesisProgress(status, chunksDone, chunksTotal) {
 }
 
 function statusMessage(status, chunksDone, chunksTotal) {
+  if (status === "paused") {
+    return chunks.length > 0
+      ? "Pausado — tocando o que já foi sintetizado."
+      : "Pausado.";
+  }
   if (status === "error") {
     return chunks.length > 0
       ? `Erro no processamento — tocando os ${chunks.length} trecho(s) já sintetizados.`
@@ -249,9 +295,10 @@ async function pollBook(bookId) {
     playChunk(currentIndex + 1);
   }
 
-  // Livro terminado (ou falho): não há mais chunk novo para esperar. Se a
-  // reprodução estava aguardando, o fim da lista agora é mesmo o fim do livro.
-  if (bookStatus === "ready" || bookStatus === "error") {
+  // Livro terminado (ou falho, ou pausado): não há mais chunk novo para
+  // esperar. Se a reprodução estava aguardando, o fim da lista agora é mesmo o
+  // fim do livro — no caso "paused" o áudio já sintetizado continua tocável.
+  if (bookStatus === "ready" || bookStatus === "error" || bookStatus === "paused") {
     stopPolling();
   }
 

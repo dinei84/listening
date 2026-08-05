@@ -45,3 +45,23 @@ class JobQueue(ABC):
     def delete_jobs_for_book(self, book_id: str) -> None:
         """Remove todos os Jobs de um book_id. Nenhum efeito se não houver Jobs."""
         ...
+
+    @abstractmethod
+    def prioritize(self, job_id: str) -> None:
+        """Dá ao Job uma prioridade maior que a de qualquer outro Job pendente (queued ou running)."""
+        ...
+
+    @abstractmethod
+    def should_yield(self, job_id: str) -> bool:
+        """Devolve True se existe um Job 'queued' com prioridade maior que a do Job informado."""
+        ...
+
+    @abstractmethod
+    def requeue(self, job_id: str) -> None:
+        """Devolve um Job individual para 'queued', preservando a prioridade."""
+        ...
+
+    @abstractmethod
+    def get_job_for_book(self, book_id: str) -> Job | None:
+        """Busca o Job de um book_id (o mais recente). None se o livro não tiver Job."""
+        ...
