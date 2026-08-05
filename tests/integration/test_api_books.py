@@ -605,3 +605,51 @@ def test_delete_book_allowed_when_paused(temp_paths, fake_working_pipeline):
 
         assert response.status_code == 200
         assert db_module.get_book(book_id) is None
+
+
+def test_get_books_chapters_returns_persisted_chapters(temp_paths):
+    from core.models import Chapter
+
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        db_module.create_chapters(
+            book_id,
+            [
+                Chapter(
+                    id="c1", title="Primeiro", order=0, text="x", start_page=1, end_page=3
+                ),
+                Chapter(
+                    id="c2", title="Segundo", order=1, text="y", start_page=4, end_page=6
+                ),
+            ],
+        )
+
+        response = client.get(f"/books/{book_id}/chapters")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [c["title"] for c in body] == ["Primeiro", "Segundo"]
+    assert [c["order"] for c in body] == [0, 1]
+    assert body[0]["start_page"] == 1 and body[0]["end_page"] == 3
+    # O texto do capítulo não trafega na API (seria o livro inteiro)
+    assert "text" not in body[0]
+
+
+def test_get_books_chapters_returns_404_for_unknown_book(temp_paths):
+    with TestClient(app) as client:
+        response = client.get("/books/nao-existe/chapters")
+
+    assert response.status_code == 404
+
+
+def test_get_books_chapters_returns_empty_list_when_none_detected(temp_paths):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        response = client.get(f"/books/{book_id}/chapters")
+
+    assert response.status_code == 200
+    assert response.json() == []
