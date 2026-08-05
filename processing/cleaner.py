@@ -15,8 +15,11 @@ def clean_text(pages: list[str]) -> str:
             line for line in lines if line.strip() not in repeated_lines
         )
 
+    # Ordem importa: a hifenização precisa ser resolvida antes da junção, senão a
+    # palavra partida ("demons-" + "tracao") seria unida com espaço no meio.
     merged_lines = _fix_hyphenation(filtered_lines)
-    return "\n".join(merged_lines).strip("\n")
+    joined_lines = _join_wrapped_lines(merged_lines)
+    return "\n".join(joined_lines).strip("\n")
 
 
 def _find_repeated_lines(page_lines: list[list[str]]) -> set[str]:
@@ -44,4 +47,29 @@ def _fix_hyphenation(lines: list[str]) -> list[str]:
             continue
         result.append(line)
         i += 1
+    return result
+
+
+# Uma linha que termina em um destes encerra a unidade de leitura: a quebra é
+# intencional e vira pausa no áudio. Qualquer outra terminação é quebra de
+# diagramação do PDF e deve ser desfeita (OS-035).
+_LINE_ENDINGS_THAT_KEEP_BREAK = (".", "!", "?", ":", ";", '"', "”", "»", ")")
+
+
+def _join_wrapped_lines(lines: list[str]) -> list[str]:
+    """Une linhas consecutivas que continuam a mesma frase, preservando linhas em branco (fronteira de parágrafo)."""
+    result: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+
+        # Linha em branco: fronteira de parágrafo, pausa legítima — nunca unir.
+        if not stripped:
+            result.append("")
+            continue
+
+        anterior = result[-1].strip() if result else ""
+        if anterior and not anterior.endswith(_LINE_ENDINGS_THAT_KEEP_BREAK):
+            result[-1] = f"{anterior} {stripped}"
+        else:
+            result.append(stripped)
     return result
