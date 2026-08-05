@@ -83,3 +83,46 @@ def test_sqlite_queue_get_job_returns_none_for_unknown_id(tmp_path):
     queue = SQLiteJobQueue(str(tmp_path / "test.db"))
 
     assert queue.get_job("does-not-exist") is None
+
+
+def test_sqlite_queue_requeue_orphaned_resets_running_jobs_to_queued(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1"))
+    queue.enqueue(_job("job-2"))
+    queue.claim_next()
+    queue.claim_next()
+
+    requeued = queue.requeue_orphaned()
+
+    assert [job.id for job in requeued] == ["job-1", "job-2"]
+    assert all(job.status == "queued" for job in requeued)
+    assert queue.get_job("job-1").status == "queued"
+    assert queue.get_job("job-2").status == "queued"
+    # Depois do resete, o Job volta a ser visível para claim_next().
+    assert queue.claim_next().id == "job-1"
+
+
+def test_sqlite_queue_requeue_orphaned_ignores_queued_and_done_jobs(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-done"))
+    queue.enqueue(_job("job-failed"))
+    queue.enqueue(_job("job-queued"))
+    queue.claim_next()
+    queue.mark_done("job-done")
+    queue.claim_next()
+    queue.mark_failed("job-failed", "boom")
+
+    requeued = queue.requeue_orphaned()
+
+    assert requeued == []
+    assert queue.get_job("job-done").status == "done"
+    assert queue.get_job("job-failed").status == "failed"
+    assert queue.get_job("job-queued").status == "queued"
+
+
+def test_sqlite_queue_requeue_orphaned_returns_empty_list_when_no_running_jobs(
+    tmp_path,
+):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+
+    assert queue.requeue_orphaned() == []

@@ -264,6 +264,36 @@ def test_synthesize_text_calls_on_chunk_for_each_chunk(monkeypatch):
     assert timing_speaker.received_count_at_call == [0, 1, 2]
 
 
+def test_synthesize_text_skips_sequences_already_synthesized(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")
+    )
+    fake_speaker = FakeSpeaker()
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"fake_speaker": lambda: fake_speaker}
+    )
+
+    text = "Sentence one. Sentence two. Sentence three."
+    chunks = pipeline.synthesize_text(
+        text, chapter_id="ch1", max_chars=20, skip_sequences={0, 1}
+    )
+
+    assert fake_speaker.call_count == 1
+    assert [c.sequence for c in chunks] == [2]
+
+
+def test_count_text_chunks_matches_number_of_synthesized_chunks(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": FakeSpeaker})
+
+    text = "Sentence one. Sentence two. Sentence three."
+
+    assert pipeline.count_text_chunks(text, max_chars=20) == 3
+    assert pipeline.count_text_chunks("") == 0
+
+
 def test_synthesize_text_returns_full_list_when_on_chunk_is_none(monkeypatch):
     monkeypatch.setattr(
         config_module, "load_config", lambda: FakeConfig(speaker="fake_speaker")

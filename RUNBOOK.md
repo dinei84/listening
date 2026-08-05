@@ -58,6 +58,8 @@ python -m worker.tasks
 
 Na primeira vez que o worker processar um livro, o Kokoro baixa os pesos do modelo do Hugging Face Hub — espere alguns segundos a mais nessa primeira execução (chamadas seguintes são mais rápidas, o modelo fica em cache).
 
+**Interromper o worker (Ctrl+C) no meio de um livro não perde o trabalho já feito** (desde a OS-022): ao subir de novo, ele devolve para a fila todo `Job` que ficou preso em `running` e continua a síntese a partir do primeiro chunk que ainda não foi persistido. Isso assume **um único worker rodando por vez** — se você subir dois, o segundo vai devolver para a fila o `Job` que o primeiro está processando de verdade.
+
 ## 5. Testar o fluxo completo pelo navegador
 
 1. Abrir `http://localhost:8000/` — é o player, servido como arquivo estático pela própria API.
@@ -123,6 +125,7 @@ Trocar qualquer um desses nomes exige que a classe correspondente já esteja reg
 - **Livro fica travado em `status: "uploaded"`** — o worker não está rodando. Ver passo 4, Terminal 2.
 - **Primeira síntese demora muito / aviso de "unauthenticated requests to the HF Hub"** — esperado na primeira vez que o Kokoro roda: ele baixa os pesos do modelo. Não é erro.
 - **Porta 8000 já em uso** — trocar a porta no comando do `uvicorn` (`--port 8001`, por exemplo) e ajustar a URL usada no navegador/curl de acordo.
+- **`retomada inconsistente: existem AudioChunks persistidos até a sequence N...`** — o livro tinha chunks de uma tentativa anterior que não batem com o texto re-extraído agora (o PDF mudou, ou a lógica de limpeza/chunking mudou entre as duas tentativas). O worker **não** apaga nada nesse caso: marca o livro como `error` com essa mensagem e pede reenvio. Reenviar o PDF gera um `book_id` novo e processa do zero.
 - **Livros processados antes da OS-019 têm pronúncia incorreta** — até a OS-019, `KokoroSpeaker` chamava a API errada do Kokoro (`generate_from_tokens` com texto bruto, sem rodar o G2P de verdade), gerando áudio com pronúncia errada em todo livro processado desde a OS-004 (decisão #14 em `docs/PROJECT_STATE.md`). Não há reprocessamento automático — reenviar manualmente qualquer livro que já estava `ready` antes dessa correção pra gerar o áudio de novo com a pronúncia certa.
 
 ## Referências

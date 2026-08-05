@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 from datetime import UTC, datetime
@@ -115,6 +116,30 @@ class RecordingSpeaker(Speaker):
         )
 
 
+class CountingSpeaker(Speaker):
+    """Speaker dublê que registra o texto de cada chamada — usado para provar o que NÃO foi sintetizado."""
+
+    def __init__(self):
+        self.synthesized_texts = []
+
+    @property
+    def cost_per_char(self):
+        return 0.0
+
+    def synthesize(self, text, voice=None):
+        self.synthesized_texts.append(text)
+        fd, path = tempfile.mkstemp(suffix=".wav")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"RIFF-fake-wav-bytes")
+        return AudioChunk(
+            chapter_id="",
+            sequence=0,
+            file_path=path,
+            duration_seconds=1.0,
+            engine_used="counting_speaker",
+        )
+
+
 @pytest.fixture
 def temp_paths(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
@@ -144,6 +169,37 @@ def fake_failing_pipeline(monkeypatch):
         registry_module, "EXTRACTORS", {"fake_extractor": FailingExtractor}
     )
     monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": FakeSpeaker})
+
+
+@pytest.fixture
+def fake_multi_chunk_pipeline(monkeypatch):
+    """Pipeline dublê de 3 chunks com um CountingSpeaker; devolve o speaker para inspeção."""
+    speaker = CountingSpeaker()
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
+    return speaker
+
+
+def _persist_previous_chunk(book_id, sequence):
+    """Simula um AudioChunk deixado no banco por uma tentativa anterior interrompida."""
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    with os.fdopen(fd, "wb") as f:
+        f.write(b"RIFF-chunk-de-tentativa-anterior")
+    audio_store_module.persist_chunks(
+        book_id,
+        [
+            AudioChunk(
+                chapter_id="job-1",
+                sequence=sequence,
+                file_path=path,
+                duration_seconds=1.0,
+                engine_used="previous_run",
+            )
+        ],
+    )
 
 
 def _create_book_and_pdf(upload_dir, book_id="book-1"):
@@ -218,18 +274,14 @@ def test_worker_process_job_persists_audio_chunks(temp_paths, fake_working_pipel
     assert os.path.exists(chunks[0].file_path)
 
 
-def test_worker_process_job_persists_chunks_incrementally(
-    temp_paths, monkeypatch
-):
+def test_worker_process_job_persists_chunks_incrementally(temp_paths, monkeypatch):
     book = _create_book_and_pdf(temp_paths)
     speaker = RecordingSpeaker(book.id)
     monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
     monkeypatch.setattr(
         registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -251,9 +303,7 @@ def test_worker_process_job_sets_book_status_to_synthesizing_before_ready(
     monkeypatch.setattr(
         registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -263,3 +313,75 @@ def test_worker_process_job_sets_book_status_to_synthesizing_before_ready(
     assert len(speaker.statuses_at_call) == 3
     assert all(s == "synthesizing" for s in speaker.statuses_at_call)
     assert db_module.get_book(book.id).status == "ready"
+
+
+def test_worker_run_worker_requeues_orphaned_jobs_on_startup(
+    temp_paths, fake_working_pipeline, monkeypatch
+):
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    # Worker anterior morreu no meio: o Job ficou órfão em "running".
+    queue.claim_next()
+    assert queue.get_job(job.id).status == "running"
+    monkeypatch.setattr(worker_tasks.time, "sleep", lambda seconds: None)
+
+    worker_tasks.run_worker(poll_interval=0.01, max_iterations=1)
+
+    assert queue.get_job(job.id).status == "done"
+    assert db_module.get_book(book.id).status == "ready"
+
+
+def test_worker_process_job_skips_already_persisted_chunks(
+    temp_paths, fake_multi_chunk_pipeline
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    # Tentativa anterior sintetizou os chunks 0 e 1 antes de ser interrompida.
+    _persist_previous_chunk(book.id, 0)
+    _persist_previous_chunk(book.id, 1)
+
+    worker_tasks.process_job(job)
+
+    assert len(speaker.synthesized_texts) == 1
+    assert speaker.synthesized_texts[0].startswith("C")
+    chunks = audio_store_module.list_chunks(book.id)
+    assert [c.sequence for c in chunks] == [0, 1, 2]
+    assert [c.engine_used for c in chunks] == [
+        "previous_run",
+        "previous_run",
+        "counting_speaker",
+    ]
+    assert db_module.get_book(book.id).status == "ready"
+    assert queue.get_job(job.id).status == "done"
+
+
+def test_worker_process_job_handles_chunk_count_inconsistency_safely(
+    temp_paths, fake_multi_chunk_pipeline, caplog
+):
+    speaker = fake_multi_chunk_pipeline
+    book = _create_book_and_pdf(temp_paths)
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    # O texto re-extraído produz 3 chunks (sequences 0..2), mas existe um chunk
+    # persistido em sequence 5 — o chunking mudou desde a tentativa anterior.
+    _persist_previous_chunk(book.id, 5)
+
+    with caplog.at_level(logging.ERROR):
+        worker_tasks.process_job(job)
+
+    assert speaker.synthesized_texts == []
+    fetched_book = db_module.get_book(book.id)
+    assert fetched_book.status == "error"
+    assert "inconsisten" in fetched_book.error_message.lower()
+    fetched_job = queue.get_job(job.id)
+    assert fetched_job.status == "failed"
+    assert "inconsisten" in fetched_job.error_message.lower()
+    assert any("inconsisten" in record.message.lower() for record in caplog.records)
+    # Caminho seguro: nada do que já existia foi apagado silenciosamente.
+    assert [c.sequence for c in audio_store_module.list_chunks(book.id)] == [5]

@@ -164,9 +164,19 @@ class JobQueue(ABC):
     def get_job(self, job_id: str) -> Job | None:
         """Busca um Job pelo id. None se não existir."""
         ...
+
+    @abstractmethod
+    def requeue_orphaned(self) -> list[Job]:
+        """Reseta para 'queued' todo Job preso em 'running' e devolve os Jobs resetados.
+        Chamado na inicialização do worker: sem heartbeat/lease não há como distinguir
+        um worker vivo de um que morreu no meio, então assume-se um único worker ativo
+        por vez (decisão #11) e todo 'running' encontrado é tratado como órfão."""
+        ...
 ```
 
 Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, resolvida via `registry`/`config` (mesma regra da seção 4.4) — nunca importa `SQLiteJobQueue` diretamente.
+
+`requeue_orphaned()` foi adicionado na OS-022 como extensão aditiva do contrato original da OS-011 — nada foi removido ou alterado, mas toda implementação de `JobQueue` precisa passar a tê-lo. **Limitação conhecida e aceita:** o método assume um único worker ativo por vez. Com dois workers rodando ao mesmo tempo, o segundo a iniciar devolveria para a fila o Job que o primeiro está processando de verdade. Resolver isso exigiria heartbeat/lease por `Job` — fora do escopo de um projeto pessoal com um worker só (ver `docs/os/OS-022-retomar-processamento.md` seção 2).
 
 ### 4.4 Registro de plugins
 
