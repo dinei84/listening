@@ -45,6 +45,7 @@ def process_job(job: Job) -> None:
                 chunk_count,
             )
 
+        db.set_book_chunk_total(job.book_id, chunk_count)
         db.update_book_status(job.book_id, "synthesizing")
 
         def _persist(chunk: AudioChunk) -> None:

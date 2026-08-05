@@ -59,12 +59,17 @@ async def list_books() -> list[dict[str, str]]:
 
 
 @router.get("/books/{book_id}/status")
-async def get_book_status(book_id: str) -> dict[str, str | None]:
-    """Devolve o status persistido de um Book (e error_message, se status == 'error'). 404 se o id não existir."""
+async def get_book_status(book_id: str) -> dict[str, str | int | None]:
+    """Devolve o status persistido de um Book, o progresso da síntese (chunks_done/chunks_total) e error_message quando status == 'error'. 404 se o id não existir."""
     book = db.get_book(book_id)
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
-    response: dict[str, str | None] = {"id": book.id, "status": book.status}
+    response: dict[str, str | int | None] = {
+        "id": book.id,
+        "status": book.status,
+        "chunks_done": len(audio_store.list_chunks(book_id)),
+        "chunks_total": book.chunk_total,
+    }
     if book.status == "error":
         response["error_message"] = book.error_message
     return response

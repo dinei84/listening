@@ -88,12 +88,13 @@ class MultiChunkExtractor(Extractor):
 
 
 class RecordingSpeaker(Speaker):
-    """Speaker dublê que registra, a cada síntese, quantos chunks já estão no banco e o status do Book."""
+    """Speaker dublê que registra, a cada síntese, quantos chunks já estão no banco, o status do Book e o chunk_total dele."""
 
     def __init__(self, book_id):
         self.book_id = book_id
         self.chunks_in_db_at_call = []
         self.statuses_at_call = []
+        self.chunk_total_at_call = []
 
     @property
     def cost_per_char(self):
@@ -103,7 +104,9 @@ class RecordingSpeaker(Speaker):
         self.chunks_in_db_at_call.append(
             len(audio_store_module.list_chunks(self.book_id))
         )
-        self.statuses_at_call.append(db_module.get_book(self.book_id).status)
+        fetched = db_module.get_book(self.book_id)
+        self.statuses_at_call.append(fetched.status)
+        self.chunk_total_at_call.append(fetched.chunk_total)
         fd, path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as f:
             f.write(b"RIFF-fake-wav-bytes")
@@ -385,3 +388,24 @@ def test_worker_process_job_handles_chunk_count_inconsistency_safely(
     assert any("inconsisten" in record.message.lower() for record in caplog.records)
     # Caminho seguro: nada do que já existia foi apagado silenciosamente.
     assert [c.sequence for c in audio_store_module.list_chunks(book.id)] == [5]
+
+
+def test_worker_process_job_sets_book_chunk_total_before_synthesizing(
+    temp_paths, monkeypatch
+):
+    book = _create_book_and_pdf(temp_paths)
+    assert book.chunk_total is None
+    speaker = RecordingSpeaker(book.id)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert speaker.chunk_total_at_call == [3, 3, 3]
+    assert db_module.get_book(book.id).chunk_total == 3

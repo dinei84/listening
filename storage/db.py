@@ -21,7 +21,8 @@ def init_db(db_path: str | None = None) -> None:
                 original_filename TEXT NOT NULL,
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                error_message TEXT
+                error_message TEXT,
+                chunk_total INTEGER
             )
             """)
         conn.commit()
@@ -35,8 +36,8 @@ def create_book(book: Book, db_path: str | None = None) -> None:
     try:
         conn.execute(
             "INSERT INTO books "
-            "(id, title, original_filename, status, created_at, error_message) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "(id, title, original_filename, status, created_at, error_message, chunk_total) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 book.id,
                 book.title,
@@ -44,6 +45,7 @@ def create_book(book: Book, db_path: str | None = None) -> None:
                 book.status,
                 book.created_at.isoformat(),
                 book.error_message,
+                book.chunk_total,
             ),
         )
         conn.commit()
@@ -56,7 +58,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -73,6 +75,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         status=row[3],
         created_at=datetime.fromisoformat(row[4]),
         error_message=row[5],
+        chunk_total=row[6],
     )
 
 
@@ -81,7 +84,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -95,6 +98,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
             status=row[3],
             created_at=datetime.fromisoformat(row[4]),
             error_message=row[5],
+            chunk_total=row[6],
         )
         for row in rows
     ]
@@ -123,6 +127,20 @@ def delete_book(book_id: str, db_path: str | None = None) -> None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         conn.execute("DELETE FROM books WHERE id = ?", (book_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_book_chunk_total(
+    book_id: str, chunk_total: int, db_path: str | None = None
+) -> None:
+    """Grava o total de chunks previsto para um Book, usado na barra de progresso da síntese."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "UPDATE books SET chunk_total = ? WHERE id = ?", (chunk_total, book_id)
+        )
         conn.commit()
     finally:
         conn.close()
