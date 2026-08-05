@@ -214,3 +214,121 @@ def test_synthesize_text_offset_respects_skip_sequences(monkeypatch):
 
     assert [c.sequence for c in chunks] == [12]
     assert len(sintetizados) == 1
+
+
+# --- OS-036: nível do TOC, capítulo desproporcional e páginas órfãs -------------
+
+
+def _pdf(tmp_path, pages, toc=None, nome="livro.pdf"):
+    doc = fitz.open()
+    for i in range(pages):
+        page = doc.new_page()
+        page.insert_text((72, 72), f"Pagina {i + 1}")
+    if toc:
+        doc.set_toc(toc)
+    path = tmp_path / nome
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def test_detect_chapters_picks_deeper_toc_level_when_level_1_is_only_front_matter(
+    tmp_path,
+):
+    """Reproduz o 'Arquitetura Limpa': nível 1 só tem front matter, estrutura real está abaixo."""
+    toc = [
+        [1, "Prefácio", 2],
+        [1, "Apresentação", 4],
+        [1, "Sobre o Autor", 6],
+        [2, "Capitulo Um", 8],
+        [2, "Capitulo Dois", 24],
+        [2, "Capitulo Tres", 40],
+        [2, "Capitulo Quatro", 56],
+        [2, "Capitulo Cinco", 72],
+    ]
+    chapters = pipeline.detect_chapters(_pdf(tmp_path, 88, toc))
+
+    titulos = [c.title for c in chapters]
+    assert "Capitulo Um" in titulos, (
+        f"deveria usar o nível com a estrutura real, veio {titulos}"
+    )
+    maior = max(c.end_page - c.start_page + 1 for c in chapters)
+    assert maior < 88 * 0.5, f"nenhum capítulo pode engolir o livro; maior={maior} de 88"
+
+
+def test_detect_chapters_subdivides_oversized_chapter(tmp_path):
+    """Capítulo que cobre fatia grande demais é subdividido para não matar a navegação."""
+    toc = [[1, "Intro", 1], [1, "Corpo", 5]]
+    chapters = pipeline.detect_chapters(_pdf(tmp_path, 120, toc))
+
+    assert len(chapters) > 2, "o capítulo de 116 páginas deveria ter sido subdividido"
+    maior = max(c.end_page - c.start_page + 1 for c in chapters)
+    assert maior < 120 * 0.5
+    # O título original sobrevive nas partes
+    assert any("Corpo" in c.title for c in chapters)
+
+
+def test_detect_chapters_covers_pages_before_first_toc_entry(tmp_path):
+    """Páginas antes do 1o item do TOC não podem ser descartadas em silêncio."""
+    toc = [[1, "Capitulo Um", 10], [1, "Capitulo Dois", 20]]
+    chapters = pipeline.detect_chapters(_pdf(tmp_path, 30, toc))
+
+    assert chapters[0].start_page == 1, (
+        f"as páginas 1-9 sumiriam; primeiro capítulo começa em {chapters[0].start_page}"
+    )
+    assert chapters[-1].end_page == 30
+
+
+def test_detect_chapters_still_uses_level_1_when_it_covers_the_book(tmp_path):
+    """Regressão OS-027: TOC bem-comportado continua sendo usado como antes."""
+    toc = [[1, "Um", 1], [1, "Dois", 4], [1, "Tres", 7]]
+    chapters = pipeline.detect_chapters(_pdf(tmp_path, 9, toc))
+
+    assert [c.title for c in chapters] == ["Um", "Dois", "Tres"]
+    assert [(c.start_page, c.end_page) for c in chapters] == [(1, 3), (4, 6), (7, 9)]
+
+
+def test_detect_chapters_still_falls_back_to_synthetic_without_toc(tmp_path):
+    """Regressão OS-027: PDF sem TOC continua no agrupamento sintético."""
+    chapters = pipeline.detect_chapters(_pdf(tmp_path, 25, None))
+
+    assert len(chapters) > 1
+    assert chapters[0].start_page == 1
+    assert chapters[-1].end_page == 25
+    for anterior, seguinte in pairwise(chapters):
+        assert seguinte.start_page == anterior.end_page + 1
+
+
+def test_detect_chapters_prefers_descriptive_title_on_same_page(tmp_path):
+    """TOC que separa número e título em níveis diferentes, mesma página: usar o descritivo."""
+    toc = [
+        [1, "Parte I", 1],
+        [2, "1", 3],
+        [3, "O que sao Design e Arquitetura", 3],
+        [2, "2", 6],
+        [3, "Um Conto de Dois Valores", 6],
+    ]
+    chapters = pipeline.detect_chapters(_pdf(tmp_path, 9, toc))
+
+    titulos = " | ".join(c.title for c in chapters)
+    assert "O que sao Design e Arquitetura" in titulos, (
+        f"deveria preferir o título descritivo ao número, veio {titulos}"
+    )
+
+
+def test_extract_chapters_loses_no_page_text(tmp_path, monkeypatch):
+    """Todo o texto extraído precisa acabar em algum capítulo."""
+    toc = [[1, "Capitulo Um", 4], [1, "Capitulo Dois", 7]]
+    pdf = _pdf(tmp_path, 9, toc)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": PagedExtractor}
+    )
+
+    chapters = pipeline.extract_chapters(pdf)
+
+    todo_texto = " ".join(c.text for c in chapters)
+    for numero in range(1, 10):
+        assert f"pagina {numero}." in todo_texto, (
+            f"o texto da página {numero} sumiu — nenhum capítulo o cobre"
+        )
