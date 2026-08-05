@@ -14,8 +14,10 @@ router = APIRouter()
 
 # Status em que o worker ainda pode estar escrevendo arquivos/linhas do livro:
 # deletar agora arriscaria remover algo em uso ou um update_book_status sobre
-# um book_id que não existe mais.
-_BLOCKED_DELETE_STATUSES = {"uploaded", "extracting", "processing", "synthesizing"}
+# um book_id que não existe mais. "uploaded" foi removido na OS-033 (decisão
+# #22): em um livro apenas enfileirado o Job está 'queued' e nada está sendo
+# escrito — a justificativa da decisão #17 não se aplica a esse status.
+_BLOCKED_DELETE_STATUSES = {"extracting", "processing", "synthesizing"}
 
 
 @router.post("/books")
@@ -66,12 +68,13 @@ async def list_books() -> list[dict[str, str]]:
 
 @router.get("/books/{book_id}/status")
 async def get_book_status(book_id: str) -> dict[str, str | int | None]:
-    """Devolve o status persistido de um Book, o progresso da síntese (chunks_done/chunks_total) e error_message quando status == 'error'. 404 se o id não existir."""
+    """Devolve o status persistido de um Book, o progresso da síntese (chunks_done/chunks_total), o title e error_message quando status == 'error'. 404 se o id não existir."""
     book = db.get_book(book_id)
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
     response: dict[str, str | int | None] = {
         "id": book.id,
+        "title": book.title,
         "status": book.status,
         "chunks_done": len(audio_store.list_chunks(book_id)),
         "chunks_total": book.chunk_total,
