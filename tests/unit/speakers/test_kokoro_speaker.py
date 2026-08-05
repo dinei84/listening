@@ -52,7 +52,7 @@ class PipelineFactory:
         self.built = []
         self.pipelines = {}
 
-    def __call__(self, speaker_self, lang_code):
+    def __call__(self, lang_code):
         self.built.append(lang_code)
         if lang_code in self.unavailable:
             raise ImportError(f"misaki[{lang_code}] nao instalado")
