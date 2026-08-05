@@ -633,9 +633,7 @@ def test_worker_process_job_assigns_correct_chapter_id_per_audio_chunk(
     temp_paths, chapter_pipeline
 ):
     book = _create_book_and_pdf(temp_paths)
-    _create_real_pdf_with_toc(
-        temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]]
-    )
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -644,9 +642,9 @@ def test_worker_process_job_assigns_correct_chapter_id_per_audio_chunk(
 
     chunks = audio_store_module.list_chunks(book.id)
     chapter_ids = {c.chapter_id for c in chunks}
-    assert len(chapter_ids) == 2, (
-        f"esperado um chapter_id por capítulo, veio {chapter_ids}"
-    )
+    assert (
+        len(chapter_ids) == 2
+    ), f"esperado um chapter_id por capítulo, veio {chapter_ids}"
     assert job.id not in chapter_ids, "chapter_id não pode mais ser o id do Job"
 
 
@@ -654,9 +652,7 @@ def test_worker_process_job_keeps_sequence_global_across_chapters(
     temp_paths, chapter_pipeline
 ):
     book = _create_book_and_pdf(temp_paths)
-    _create_real_pdf_with_toc(
-        temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]]
-    )
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -664,9 +660,9 @@ def test_worker_process_job_keeps_sequence_global_across_chapters(
     worker_tasks.process_job(job)
 
     sequences = [c.sequence for c in audio_store_module.list_chunks(book.id)]
-    assert sequences == list(range(len(sequences))), (
-        f"sequence deve ser global e contínua, veio {sequences}"
-    )
+    assert sequences == list(
+        range(len(sequences))
+    ), f"sequence deve ser global e contínua, veio {sequences}"
     assert len(sequences) >= 2
 
 
@@ -689,9 +685,7 @@ def test_worker_process_job_persists_chapters(temp_paths, chapter_pipeline):
 def test_chunks_total_correct_with_multiple_chapters(temp_paths, chapter_pipeline):
     """Regressão OS-024: chunk_total é a soma de todos os capítulos."""
     book = _create_book_and_pdf(temp_paths)
-    _create_real_pdf_with_toc(
-        temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]]
-    )
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -706,9 +700,7 @@ def test_resume_consistency_check_works_across_chapters(temp_paths, chapter_pipe
     """Regressão OS-022: retomar um livro com capítulos não re-sintetiza o que já existe."""
     speaker = chapter_pipeline
     book = _create_book_and_pdf(temp_paths)
-    _create_real_pdf_with_toc(
-        temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]]
-    )
+    _create_real_pdf_with_toc(temp_paths, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)

@@ -618,10 +618,20 @@ def test_get_books_chapters_returns_persisted_chapters(temp_paths):
             book_id,
             [
                 Chapter(
-                    id="c1", title="Primeiro", order=0, text="x", start_page=1, end_page=3
+                    id="c1",
+                    title="Primeiro",
+                    order=0,
+                    text="x",
+                    start_page=1,
+                    end_page=3,
                 ),
                 Chapter(
-                    id="c2", title="Segundo", order=1, text="y", start_page=4, end_page=6
+                    id="c2",
+                    title="Segundo",
+                    order=1,
+                    text="y",
+                    start_page=4,
+                    end_page=6,
                 ),
             ],
         )

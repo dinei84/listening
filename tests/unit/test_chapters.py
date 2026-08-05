@@ -1,5 +1,6 @@
+from itertools import pairwise
+
 import fitz
-import pytest
 
 from core import config as config_module
 from core import pipeline
@@ -54,7 +55,11 @@ def test_detect_chapters_reads_toc_when_present(tmp_path):
     pdf = _pdf_with_toc(
         tmp_path,
         pages=9,
-        toc=[[1, "Primeiro Capitulo", 1], [1, "Segundo Capitulo", 4], [1, "Terceiro", 7]],
+        toc=[
+            [1, "Primeiro Capitulo", 1],
+            [1, "Segundo Capitulo", 4],
+            [1, "Terceiro", 7],
+        ],
     )
 
     chapters = pipeline.detect_chapters(pdf)
@@ -95,7 +100,7 @@ def test_detect_chapters_falls_back_to_synthetic_grouping_when_no_toc(tmp_path):
     assert chapters[0].start_page == 1
     assert chapters[-1].end_page == 25
     # Contíguos e sem buracos: cada capítulo começa logo após o fim do anterior.
-    for anterior, seguinte in zip(chapters, chapters[1:]):
+    for anterior, seguinte in pairwise(chapters):
         assert seguinte.start_page == anterior.end_page + 1
     assert all(c.title for c in chapters), "capítulo sintético precisa de título"
 
@@ -110,9 +115,7 @@ def test_detect_chapters_single_page_pdf_without_toc(tmp_path):
 
 
 def test_extract_chapters_fills_text_from_pages_of_each_chapter(tmp_path, monkeypatch):
-    pdf = _pdf_with_toc(
-        tmp_path, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]]
-    )
+    pdf = _pdf_with_toc(tmp_path, pages=6, toc=[[1, "Um", 1], [1, "Dois", 4]])
     monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
     monkeypatch.setattr(
         registry_module, "EXTRACTORS", {"fake_extractor": PagedExtractor}
@@ -131,10 +134,11 @@ def test_extract_chapters_fills_text_from_pages_of_each_chapter(tmp_path, monkey
 
 
 def test_synthesize_text_applies_sequence_offset(monkeypatch):
-    from plugins.speakers.base import Speaker
-    from core.models import AudioChunk
     import os
     import tempfile
+
+    from core.models import AudioChunk
+    from plugins.speakers.base import Speaker
 
     class FakeSpeaker(Speaker):
         @property
@@ -167,10 +171,11 @@ def test_synthesize_text_applies_sequence_offset(monkeypatch):
 
 
 def test_synthesize_text_offset_respects_skip_sequences(monkeypatch):
-    from plugins.speakers.base import Speaker
-    from core.models import AudioChunk
     import os
     import tempfile
+
+    from core.models import AudioChunk
+    from plugins.speakers.base import Speaker
 
     sintetizados = []
 

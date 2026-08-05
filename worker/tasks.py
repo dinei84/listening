@@ -3,7 +3,7 @@ import time
 
 from core import config as config_module
 from core import pipeline
-from core.models import AudioChunk, Chapter, Job
+from core.models import AudioChunk, Job
 from plugins import registry as registry_module
 from plugins.speakers.kokoro_speaker import LANG_CODE_BY_LANGUAGE
 from storage import audio_store, db, uploads
@@ -28,13 +28,20 @@ def process_job(job: Job) -> None:
     pdf_path = uploads.pdf_path_for(job.book_id)
 
     try:
-        text = pipeline.extract_clean_text(str(pdf_path))
-        chapter = Chapter(id=job.id, title=book.title, order=0, text=text)
+        # OS-027: o livro é extraído e limpo por capítulo, não mais numa tacada só.
+        chapters = pipeline.extract_chapters(str(pdf_path))
+        db.create_chapters(job.book_id, chapters)
 
         already_done = {
             chunk.sequence for chunk in audio_store.list_chunks(job.book_id)
         }
-        chunk_count = pipeline.count_text_chunks(text)
+        # O total é a soma dos capítulos — a sequence continua global e contínua
+        # no livro inteiro, então a checagem de consistência (OS-022) e a barra de
+        # progresso (OS-024) seguem valendo sem mudança de semântica.
+        chunks_por_capitulo = [
+            pipeline.count_text_chunks(chapter.text) for chapter in chapters
+        ]
+        chunk_count = sum(chunks_por_capitulo)
         inconsistency = _resume_inconsistency(already_done, chunk_count)
         if inconsistency is not None:
             logger.error("Book %s: %s", job.book_id, inconsistency)
@@ -64,13 +71,17 @@ def process_job(job: Job) -> None:
                 raise _YieldRequested()
 
         lang_code = LANG_CODE_BY_LANGUAGE.get(book.language) if book.language else None
-        pipeline.synthesize_text(
-            text,
-            chapter_id=chapter.id,
-            on_chunk=_persist,
-            skip_sequences=already_done,
-            lang_code=lang_code,
-        )
+        offset = 0
+        for chapter, chapter_chunks in zip(chapters, chunks_por_capitulo):
+            pipeline.synthesize_text(
+                chapter.text,
+                chapter_id=chapter.id,
+                on_chunk=_persist,
+                skip_sequences=already_done,
+                lang_code=lang_code,
+                sequence_offset=offset,
+            )
+            offset += chapter_chunks
         db.update_book_status(job.book_id, "ready")
         queue.mark_done(job.id)
     except _YieldRequested:
