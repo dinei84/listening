@@ -128,4 +128,4 @@ Nenhum bloqueio. Uma observação e uma sugestão para o dono do projeto:
 
 ## 8. Link do PR
 
-[a preencher]
+https://github.com/dinei84/listening/pull/22
