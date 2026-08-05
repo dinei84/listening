@@ -16,9 +16,9 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 **Última OS concluída:** OS-017 — `EasyOCRExtractor`.
 
-**OS em andamento:** nenhuma.
+**OS em andamento:** OS-018 — corrige bug real encontrado em uso (`Phoneme string too long: 863 > 510` ao processar um livro técnico longo), ver `docs/os/OS-018-kokoro-limite-fonemas.md`.
 
-**Próxima OS a abrir:** a definir — candidatos: (a) revisitar o threshold `0.85` para `EasyOCRExtractor` à luz do achado empírico desta OS, antes de (b) ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py` (hoje só conhece pymupdf→tesseract, 2 elos) — ligar com um threshold não calibrado arriscaria descartar boas extrações do EasyOCR sistematicamente.
+**Próxima OS a abrir após OS-018:** a definir — candidatos: (a) revisitar o threshold `0.85` para `EasyOCRExtractor` à luz do achado empírico da OS-017, antes de (b) ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py`.
 
 ## 3. Decisões já tomadas (Architecture Decision Log)
 
@@ -86,11 +86,13 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 15. **OS-015 — `GET /books` (listagem)** — status: concluída
 16. **OS-016 — Liga a listagem de livros na UI do player** — status: concluída, verificação manual em navegador feita na revisão (ver `docs/os/OS-016-listagem-no-player.md` e `docs/report/OS-016-report.md` seção 6.1)
 17. **OS-017 — `plugins/extractors/easyocr_extractor.py`** (terceiro elo da cadeia de OCR, decisão #13) — status: concluída, com achado empírico sobre o threshold `0.85` (ver seção 6 e `docs/report/OS-017-report.md`)
-18. Revisitar o threshold de confiança `0.85` especificamente para `EasyOCRExtractor`, à luz do achado da OS-017 — recomendado antes do item 19
-19. Ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py`
+18. **OS-018 — Corrige falha de síntese em texto denso** ("Phoneme string too long") — bug real encontrado em uso, ver `docs/os/OS-018-kokoro-limite-fonemas.md` — status: aberta, aguardando execução
+19. Revisitar o threshold de confiança `0.85` especificamente para `EasyOCRExtractor`, à luz do achado da OS-017 — recomendado antes do item 20
+20. Ligar `EasyOCRExtractor` na cadeia de fallback de `core/pipeline.py`
 
 ## 6. Riscos e bloqueios conhecidos
 
+- **Em aberto (bug real, achado em uso pelo dono do projeto):** enviar "Security Engineering" (Ross Anderson, livro técnico longo) resultou em `Book.status == "error"`. Causa raiz encontrada consultando `jobs.error_message` direto no SQLite (não havia jeito de ver isso pela API nem pelo log do worker — `worker/tasks.py` não loga a exceção em lugar nenhum, só guarda no banco): `Phoneme string too long: 863 > 510`. `processing/chunker.py` divide por caracteres (`DEFAULT_MAX_CHARS = 1000`) sem saber quantos fonemas isso vira no Kokoro; texto denso/técnico gera mais fonemas por caractere, um chunk dentro do limite de caracteres pode estourar o limite de 510 fonemas do Kokoro, e como a síntese é sequencial sem tolerância a falha parcial, um chunk problemático derruba o livro inteiro. Corrigido pela OS-018 (`docs/os/OS-018-kokoro-limite-fonemas.md`): resiliência no `KokoroSpeaker` (divide e tenta de novo) + recalibração empírica de `DEFAULT_MAX_CHARS` + `error_message` exposto em `GET /books/{id}/status`.
 - **Resolvido:** a verificação manual em navegador exigida pelos DoDs da OS-014 e da OS-016 foi concluída em ambos os casos na revisão pós-entrega, com acesso a navegador real. Único item não exercitado fim a fim nas duas: o clique no seletor nativo de arquivo do SO (barreira de segurança do próprio browser, não do player) — o endpoint que ele chama foi validado via `curl`/`DataTransfer`+`requestSubmit()` e o código revisado. Detalhes em `docs/report/OS-014-report.md` seção 6.1 e `docs/report/OS-016-report.md` seção 6.1.
 - Nova ferramenta de dev: `.claude/launch.json` configurado para subir a API (`uvicorn api.main:app`) via preview do navegador em sessões futuras. Lembrar de também rodar `python -m worker.tasks` numa janela separada para o processamento acontecer de verdade.
 - Decisão #3 (fila de jobs) resolvida na decisão #11: `SQLiteJobQueue` como plugin, contrato pronto para trocar para Redis depois sem reescrever pipeline/API/worker.
