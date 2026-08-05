@@ -482,7 +482,6 @@ def test_worker_process_job_yields_when_higher_priority_arrives(
 def test_worker_yield_requeues_job_without_marking_failed(
     temp_paths, fake_multi_chunk_pipeline
 ):
-    speaker = fake_multi_chunk_pipeline
     book = _create_book_and_pdf(temp_paths)
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
@@ -501,7 +500,6 @@ def test_worker_yield_requeues_job_without_marking_failed(
 def test_worker_yield_sets_book_status_to_paused_and_keeps_chunks(
     temp_paths, fake_multi_chunk_pipeline
 ):
-    speaker = fake_multi_chunk_pipeline
     book = _create_book_and_pdf(temp_paths)
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")

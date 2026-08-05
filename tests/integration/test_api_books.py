@@ -496,7 +496,7 @@ def test_post_books_prioritize_makes_queued_book_claimed_next(
     temp_paths, fake_working_pipeline
 ):
     with TestClient(app) as client:
-        first = client.post("/books", files=_upload_files()).json()["id"]
+        client.post("/books", files=_upload_files())
         second = client.post("/books", files=_upload_files()).json()["id"]
 
         response = client.post(f"/books/{second}/prioritize")

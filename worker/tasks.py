@@ -11,6 +11,10 @@ from storage import audio_store, db, uploads
 logger = logging.getLogger(__name__)
 
 
+class _YieldRequested(Exception):
+    """Sentinela interna: a síntese foi interrompida porque um Job de prioridade maior entrou na fila (preempção cooperativa, OS-032)."""
+
+
 def process_job(job: Job) -> None:
     """Roda o pipeline para o Book do job — pulando os AudioChunks já persistidos por uma tentativa anterior — e marca o Book/Job como concluído ou falho."""
     cfg = config_module.load_config()
@@ -51,6 +55,13 @@ def process_job(job: Job) -> None:
 
         def _persist(chunk: AudioChunk) -> None:
             audio_store.persist_chunks(job.book_id, [chunk])
+            # Preempção cooperativa (OS-032): entre um chunk e outro o worker
+            # pergunta se existe Job queued de prioridade maior esperando. Se
+            # sim, para no fim do chunk corrente (que já foi persistido acima)
+            # e devolve o próprio Job para a fila — retomar continua de onde
+            # parou via skip_sequences (OS-022).
+            if queue.should_yield(job.id):
+                raise _YieldRequested()
 
         lang_code = LANG_CODE_BY_LANGUAGE.get(book.language) if book.language else None
         pipeline.synthesize_text(
@@ -62,6 +73,17 @@ def process_job(job: Job) -> None:
         )
         db.update_book_status(job.book_id, "ready")
         queue.mark_done(job.id)
+    except _YieldRequested:
+        # Não é falha: o Job volta para 'queued' preservando a prioridade e o
+        # Book fica 'paused' — nada é apagado, os chunks já persistidos é que
+        # permitem retomar exatamente de onde parou.
+        logger.info(
+            "Job %s (book %s) preemptado por Job de prioridade maior; livro pausado",
+            job.id,
+            job.book_id,
+        )
+        db.update_book_status(job.book_id, "paused")
+        queue.requeue(job.id)
     # Captura ampla intencional: mesmo motivo da OS-010 (rota /books) — qualquer
     # falha do pipeline vira Book "error" + Job "failed", nunca derruba o worker.
     except Exception as exc:  # noqa: BLE001

@@ -81,6 +81,25 @@ async def get_book_status(book_id: str) -> dict[str, str | int | None]:
     return response
 
 
+@router.post("/books/{book_id}/prioritize")
+async def prioritize_book(book_id: str) -> dict[str, str]:
+    """Coloca o Job do livro no topo da fila — a síntese em andamento de outro livro pausa cooperativamente no fim do chunk corrente. 404 se o livro (ou o Job dele) não existir; 409 se o livro já está pronto/falho, não há o que processar."""
+    book = db.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    cfg = config_module.load_config()
+    queue = registry_module.QUEUES[cfg.queue]()
+    job = queue.get_job_for_book(book_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if book.status in ("ready", "error"):
+        raise HTTPException(status_code=409, detail="Nothing to process")
+
+    queue.prioritize(job.id)
+    return {"id": book_id, "status": "prioritized"}
+
+
 @router.delete("/books/{book_id}")
 async def delete_book(book_id: str) -> dict[str, str]:
     """Remove um Book e todo o seu rastro (áudio, jobs, PDF). 404 se não existir; 409 se o processamento ainda está em andamento."""
