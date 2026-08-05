@@ -1,6 +1,7 @@
 const STORAGE_KEY = "audiobook_player_state_v1";
 const POLL_INTERVAL_MS = 2000;
 const SAVE_THROTTLE_MS = 3000;
+const WAITING_MESSAGE = "Aguardando próximo trecho...";
 
 const uploadForm = document.getElementById("upload-form");
 const pdfInput = document.getElementById("pdf-input");
@@ -23,10 +24,16 @@ const restartBtn = document.getElementById("restart-btn");
 
 let chunks = [];
 let currentIndex = 0;
+// A posição em reprodução é ancorada na `sequence`, não no índice do array: a lista
+// cresce durante a síntese e o índice do mesmo trecho pode mudar quando ela cresce.
+let currentSequence = null;
 let currentBookId = null;
 let pollTimer = null;
 let lastSaveTime = 0;
 let pendingResume = null;
+let playbackStarted = false;
+let waitingForNextChunk = false;
+let bookStatus = null;
 
 function loadSavedState() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -115,14 +122,9 @@ async function deleteBook(bookId) {
       throw new Error("Falha ao deletar o livro");
     }
     if (currentBookId === bookId) {
-      stopPolling();
-      audioPlayer.pause();
-      audioPlayer.removeAttribute("src");
-      audioPlayer.load();
+      resetPlaybackState();
       playerSection.hidden = true;
-      chunks = [];
       currentBookId = null;
-      pendingResume = null;
       localStorage.removeItem(STORAGE_KEY);
     }
     refreshBooksList();
@@ -158,42 +160,109 @@ function stopPolling() {
 }
 
 function renderSynthesisProgress(status, chunksDone, chunksTotal) {
-  if (chunksTotal === null || chunksTotal === undefined) {
+  if (chunksTotal === null || chunksTotal === undefined || status === "ready") {
     synthesisProgress.hidden = true;
-    playerStatus.textContent = `Status: ${status}`;
     return;
   }
   synthesisProgress.hidden = false;
   synthesisProgress.max = chunksTotal;
   synthesisProgress.value = Math.min(chunksDone, chunksTotal);
-  playerStatus.textContent = `Sintetizando: ${chunksDone} de ${chunksTotal} chunks`;
 }
 
-function pollUntilReady(bookId, onReady, onError) {
-  stopPolling();
-  const check = async () => {
-    try {
-      const { status, chunks_done, chunks_total } = await fetchStatus(bookId);
-      renderSynthesisProgress(status, chunks_done, chunks_total);
-      if (status === "ready") {
-        stopPolling();
-        onReady();
-      } else if (status === "error") {
-        stopPolling();
-        onError("Processamento falhou.");
-      }
-    } catch (err) {
-      stopPolling();
-      onError(err.message);
-    }
-  };
-  check();
-  pollTimer = setInterval(check, POLL_INTERVAL_MS);
+function statusMessage(status, chunksDone, chunksTotal) {
+  if (status === "error") {
+    return chunks.length > 0
+      ? `Erro no processamento — tocando os ${chunks.length} trecho(s) já sintetizados.`
+      : "Erro: processamento falhou.";
+  }
+  if (status === "ready") {
+    if (chunks.length === 0) return "Nenhum áudio disponível.";
+    return waitingForNextChunk ? "Fim do áudio." : "Pronto.";
+  }
+  if (waitingForNextChunk) return WAITING_MESSAGE;
+
+  const progress =
+    chunksTotal === null || chunksTotal === undefined
+      ? `Status: ${status}`
+      : `Sintetizando: ${chunksDone} de ${chunksTotal} chunks`;
+  return chunks.length > 0 ? `${progress} — tocando o que já está pronto` : progress;
+}
+
+function mergeChunks(fetched) {
+  const known = new Set(chunks.map((chunk) => chunk.sequence));
+  const added = fetched.filter((chunk) => !known.has(chunk.sequence));
+  if (added.length === 0) return 0;
+
+  chunks = chunks.concat(added).sort((a, b) => a.sequence - b.sequence);
+  if (currentSequence !== null) {
+    const index = chunks.findIndex((chunk) => chunk.sequence === currentSequence);
+    if (index >= 0) currentIndex = index;
+  }
+  return added.length;
+}
+
+function startPlayback() {
+  playbackStarted = true;
+  if (pendingResume) {
+    resumeBanner.hidden = false;
+    return;
+  }
+  playChunk(0);
+}
+
+// Um ciclo de polling: atualiza o status, incorpora os chunks novos que a síntese
+// produziu desde o ciclo anterior e mantém a reprodução andando sem reiniciá-la.
+async function pollBook(bookId) {
+  let statusData;
+  try {
+    statusData = await fetchStatus(bookId);
+  } catch (err) {
+    stopPolling();
+    playerStatus.textContent = `Erro: ${err.message}`;
+    return;
+  }
+  if (bookId !== currentBookId) return;
+
+  bookStatus = statusData.status;
+  renderSynthesisProgress(
+    bookStatus,
+    statusData.chunks_done,
+    statusData.chunks_total
+  );
+
+  let added = 0;
+  try {
+    added = mergeChunks(await fetchAudioChunks(bookId));
+  } catch (err) {
+    // Falha pontual ao listar o áudio não derruba o que já está tocando —
+    // o próximo ciclo tenta de novo.
+  }
+  if (bookId !== currentBookId) return;
+
+  if (!playbackStarted && chunks.length > 0) {
+    startPlayback();
+  } else if (waitingForNextChunk && added > 0) {
+    playChunk(currentIndex + 1);
+  }
+
+  // Livro terminado (ou falho): não há mais chunk novo para esperar. Se a
+  // reprodução estava aguardando, o fim da lista agora é mesmo o fim do livro.
+  if (bookStatus === "ready" || bookStatus === "error") {
+    stopPolling();
+  }
+
+  playerStatus.textContent = statusMessage(
+    bookStatus,
+    statusData.chunks_done,
+    statusData.chunks_total
+  );
 }
 
 function playChunk(index, startTime) {
   if (index < 0 || index >= chunks.length) return;
   currentIndex = index;
+  currentSequence = chunks[index].sequence;
+  waitingForNextChunk = false;
   audioPlayer.src = chunks[index].url;
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
 
@@ -208,33 +277,38 @@ function playChunk(index, startTime) {
   audioPlayer.load();
 }
 
+function resetPlaybackState() {
+  stopPolling();
+  audioPlayer.pause();
+  audioPlayer.removeAttribute("src");
+  audioPlayer.load();
+  chunks = [];
+  currentIndex = 0;
+  currentSequence = null;
+  playbackStarted = false;
+  waitingForNextChunk = false;
+  bookStatus = null;
+  pendingResume = null;
+  resumeBanner.hidden = true;
+  synthesisProgress.hidden = true;
+}
+
 async function openBook(bookId, resumeState) {
+  resetPlaybackState();
   currentBookId = bookId;
+  if (resumeState && resumeState.bookId === bookId) {
+    pendingResume = resumeState;
+  }
   playerSection.hidden = false;
   playerTitle.textContent = `Livro: ${bookId}`;
   playerStatus.textContent = "Verificando status...";
 
-  pollUntilReady(
-    bookId,
-    async () => {
-      synthesisProgress.hidden = true;
-      chunks = await fetchAudioChunks(bookId);
-      if (chunks.length === 0) {
-        playerStatus.textContent = "Nenhum áudio disponível.";
-        return;
-      }
-      if (resumeState && resumeState.bookId === bookId) {
-        pendingResume = resumeState;
-        resumeBanner.hidden = false;
-      } else {
-        playChunk(0);
-      }
-      playerStatus.textContent = "Pronto.";
-    },
-    (message) => {
-      playerStatus.textContent = `Erro: ${message}`;
-    }
-  );
+  // Desde a OS-021 o áudio é persistido chunk a chunk e `GET /books/{id}/audio`
+  // devolve o que já existe sem olhar o status — o player não espera mais "ready".
+  // O timer é armado antes do primeiro ciclo para que um livro já pronto/com erro
+  // consiga pará-lo de dentro do próprio ciclo.
+  pollTimer = setInterval(() => pollBook(bookId), POLL_INTERVAL_MS);
+  await pollBook(bookId);
 }
 
 uploadForm.addEventListener("submit", async (event) => {
@@ -290,6 +364,13 @@ audioPlayer.addEventListener("ended", () => {
   const nextIndex = currentIndex + 1;
   if (nextIndex < chunks.length) {
     playChunk(nextIndex);
+    return;
+  }
+  if (pollTimer !== null) {
+    // Alcançamos o fim do que já foi sintetizado, não o fim do livro: o próximo
+    // ciclo de polling retoma sozinho quando o trecho seguinte ficar pronto.
+    waitingForNextChunk = true;
+    playerStatus.textContent = WAITING_MESSAGE;
   } else {
     playerStatus.textContent = "Fim do áudio.";
   }

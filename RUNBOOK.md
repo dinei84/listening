@@ -65,7 +65,7 @@ Na primeira vez que o worker processar um livro, o Kokoro baixa os pesos do mode
 1. Abrir `http://localhost:8000/` — é o player, servido como arquivo estático pela própria API.
 2. Escolher um PDF e clicar em "Enviar". Um PDF com texto nativo processa mais rápido (vai direto pelo `PyMuPDFExtractor`); um PDF escaneado cai para o `TesseractOCR` (mais lento).
 3. A página faz polling do status a cada 2s. Acompanhe também os logs do Terminal 2 (worker) — é lá que o processamento de fato acontece.
-4. Quando o status virar `ready`, o áudio começa a tocar sozinho.
+4. O áudio começa a tocar assim que o **primeiro trecho** fica pronto, sem esperar o livro inteiro (desde a OS-030) — a barra de progresso continua mostrando quanto falta sintetizar. Se a reprodução alcançar a síntese, o player mostra "Aguardando próximo trecho..." e retoma sozinho quando o trecho seguinte fica pronto.
 5. Testar play/pause, trocar a velocidade (dropdown), recarregar a página (deve oferecer "Retomar de onde parou?").
 6. Pra reabrir um livro processado antes, usar o campo "Abrir livro existente" com o `id` devolvido no upload (aparece na tela e também em `GET /books/{id}/status`).
 
