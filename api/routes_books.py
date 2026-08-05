@@ -3,14 +3,23 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from core import config as config_module
 from core.models import Book, Job
 from plugins import registry as registry_module
 from plugins.speakers.kokoro_speaker import LANG_CODE_BY_LANGUAGE
-from storage import audio_store, db, uploads
+from storage import audio_store, db, progress_store, uploads
 
 router = APIRouter()
+
+
+class ProgressPayload(BaseModel):
+    """Corpo de PUT /books/{id}/progress."""
+
+    sequence: int
+    position_seconds: float
+
 
 # Status em que o worker ainda pode estar escrevendo arquivos/linhas do livro:
 # deletar agora arriscaria remover algo em uso ou um update_book_status sobre
@@ -117,6 +126,9 @@ async def delete_book(book_id: str) -> dict[str, str]:
     queue.delete_jobs_for_book(book_id)
     audio_store.delete_chunks(book_id)
     uploads.delete_pdf(book_id)
+    # Progresso de leitura vai junto: sem isso, um book_id reciclado herdaria a
+    # posição de outro livro (OS-028).
+    progress_store.delete_progress(book_id)
     db.delete_book(book_id)
     return {"id": book_id, "status": "deleted"}
 
@@ -136,3 +148,34 @@ async def get_book_chapters(book_id: str) -> list[dict[str, str | int]]:
         }
         for chapter in db.list_chapters(book_id)
     ]
+
+
+@router.get("/books/{book_id}/progress")
+async def get_book_progress(book_id: str) -> dict[str, str | int | float]:
+    """Devolve a posição de leitura salva de um Book. 404 se o livro não existir ou se a posição nunca foi salva."""
+    if db.get_book(book_id) is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    progress = progress_store.get_progress(book_id)
+    if progress is None:
+        raise HTTPException(status_code=404, detail="No progress saved for this book")
+    return {
+        "book_id": progress.book_id,
+        "sequence": progress.sequence,
+        "position_seconds": progress.position_seconds,
+        "updated_at": progress.updated_at.isoformat(),
+    }
+
+
+@router.put("/books/{book_id}/progress")
+async def put_book_progress(
+    book_id: str, payload: ProgressPayload
+) -> dict[str, str | int | float]:
+    """Grava a posição de leitura atual de um Book, sobrescrevendo a anterior. 404 se o livro não existir."""
+    if db.get_book(book_id) is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    progress_store.save_progress(book_id, payload.sequence, payload.position_seconds)
+    return {
+        "book_id": book_id,
+        "sequence": payload.sequence,
+        "position_seconds": payload.position_seconds,
+    }

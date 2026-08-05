@@ -13,8 +13,8 @@ from plugins.extractors.base import Extractor
 from plugins.queues import sqlite_queue as sqlite_queue_module
 from plugins.speakers.base import Speaker
 from storage import audio_store as audio_store_module
-from storage import progress_store as progress_store_module
 from storage import db as db_module
+from storage import progress_store as progress_store_module
 from storage import uploads as uploads_module
 from worker import tasks as worker_tasks
 
