@@ -1,0 +1,27 @@
+# Dicionário de substituição fonética (OS-037)
+#
+# Termos que o G2P do Kokoro para português (espeak-ng, baseado em regras) pronuncia
+# errado de forma recorrente. A chave é o termo como aparece no texto; o valor é a
+# grafia que faz o G2P acertar. A troca respeita fronteira de palavra e é
+# case-insensitive na busca.
+#
+# REGRA PARA ADICIONAR UMA ENTRADA (ver RUNBOOK.md, seção "Dicionário fonético"):
+# só entra aqui o termo cuja melhora foi VERIFICADA comparando o G2P **dentro de uma
+# frase**, não com o termo isolado — o espeak lê o mesmo termo de formas diferentes
+# conforme o contexto. Uma "correção" que piora a fonemização é pior que o erro
+# original: foi o caso de `cache`, testado e REJEITADO na OS-037 ('kˈaʃy' ficou
+# melhor que 'kˈɛksi').
+#
+# Evidência em contexto de cada entrada está em docs/report/OS-037-report.md.
+
+# --- Ganho claro: o espeak produzia leitura quebrada ou tônica errada -----------
+JSON: djêizon         # 'ʒsˈoŋ' (quebrado)      -> 'dʒˈeizoŋ'
+Docker: dóquer        # 'dokˈer' (tônica errada) -> 'dˈɔkɛr'
+design: dizáin        # 'dezˈIn'                 -> 'ʤˌizˈain'
+SOLID: sólid          # 'solˈid' (tônica errada) -> 'sˈɔlid'
+
+# --- Ganho modesto: em frase o espeak já soletra, mas cola as letras num bloco.
+# A substituição separa as sílabas, deixando a sigla mais inteligível no áudio.
+UML: u ême ele        # 'ˌuˌemeˈɛly' -> 'ˈu ˈemj ˌely'
+OCP: ó cê pê          # 'ˌɔsˌepˈe'   -> 'ˈɔ sˈe pˈe'
+API: a pê i           # 'ˌapˌeˈi'    -> 'a pˈe ˈi'

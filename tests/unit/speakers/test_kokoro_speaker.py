@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from core.models import AudioChunk
+from plugins.speakers import kokoro_speaker as kokoro_speaker_module
 from plugins.speakers.base import Speaker
 from plugins.speakers.kokoro_speaker import KokoroSpeaker
 
@@ -328,3 +329,93 @@ def test_kokoro_speaker_short_text_unchanged(pipeline_factory):
     assert lang_code == "p"
     assert text == PT_TEXT
     os.remove(chunk.file_path)
+
+
+# --- OS-037: dicionário de substituição fonética --------------------------------
+
+
+def test_phonetic_map_replaces_known_term_before_synthesis(
+    pipeline_factory, monkeypatch
+):
+    monkeypatch.setattr(
+        kokoro_speaker_module, "_phonetic_map", lambda: {"UML": "u ême ele"}
+    )
+    speaker = KokoroSpeaker()
+
+    speaker.synthesize("O diagrama UML mostra as classes.", lang_code="p")
+
+    _, (texto, _, _) = pipeline_factory.single_call()
+    assert "u ême ele" in texto
+    assert "UML" not in texto
+
+
+def test_phonetic_map_respects_word_boundaries(pipeline_factory, monkeypatch):
+    """Não trocar dentro de outra palavra: 'API' não pode casar em 'RAPIDEZ'."""
+    monkeypatch.setattr(
+        kokoro_speaker_module, "_phonetic_map", lambda: {"API": "a pê i"}
+    )
+    speaker = KokoroSpeaker()
+
+    speaker.synthesize("A RAPIDEZ da API impressiona.", lang_code="p")
+
+    _, (texto, _, _) = pipeline_factory.single_call()
+    assert "RAPIDEZ" in texto, f"a palavra foi corrompida: {texto!r}"
+    assert "a pê i" in texto
+
+
+def test_phonetic_map_is_case_insensitive(pipeline_factory, monkeypatch):
+    monkeypatch.setattr(
+        kokoro_speaker_module, "_phonetic_map", lambda: {"JSON": "djêizon"}
+    )
+    speaker = KokoroSpeaker()
+
+    speaker.synthesize("O arquivo json foi salvo.", lang_code="p")
+
+    _, (texto, _, _) = pipeline_factory.single_call()
+    assert "djêizon" in texto
+
+
+def test_text_without_mapped_terms_is_unchanged(pipeline_factory, monkeypatch):
+    monkeypatch.setattr(
+        kokoro_speaker_module, "_phonetic_map", lambda: {"UML": "u ême ele"}
+    )
+    speaker = KokoroSpeaker()
+    original = "Uma frase comum sem nenhum termo do mapa."
+
+    speaker.synthesize(original, lang_code="p")
+
+    _, (texto, _, _) = pipeline_factory.single_call()
+    assert texto == original
+
+
+def test_missing_or_empty_map_does_not_break_synthesis(pipeline_factory, monkeypatch):
+    monkeypatch.setattr(kokoro_speaker_module, "_phonetic_map", dict)
+    speaker = KokoroSpeaker()
+    original = "Texto qualquer com UML e API."
+
+    chunk = speaker.synthesize(original, lang_code="p")
+
+    _, (texto, _, _) = pipeline_factory.single_call()
+    assert texto == original
+    assert chunk.engine_used == "kokoro"
+
+
+def test_phonetic_map_does_not_change_audio_chunk_count(pipeline_factory, monkeypatch):
+    """Regressão OS-021/034: a substituição continua produzindo UM AudioChunk."""
+    monkeypatch.setattr(
+        kokoro_speaker_module, "_phonetic_map", lambda: {"UML": "u ême ele"}
+    )
+    speaker = KokoroSpeaker()
+
+    chunk = speaker.synthesize("Diagrama UML de exemplo.", lang_code="p")
+
+    assert isinstance(chunk, AudioChunk)
+    assert chunk.sequence == 0
+
+
+def test_phonetic_map_file_loads_real_entries():
+    """O mapa versionado carrega e tem só entradas com evidência (ver relatório)."""
+    mapa = kokoro_speaker_module._phonetic_map()
+    assert isinstance(mapa, dict)
+    assert mapa, "o mapa inicial não pode estar vazio"
+    assert "UML" in mapa

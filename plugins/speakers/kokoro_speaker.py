@@ -1,10 +1,13 @@
+import functools
 import os
 import re
 import tempfile
+from pathlib import Path
 
 import kokoro
 import soundfile as sf
 import torch
+import yaml
 from langdetect import DetectorFactory, LangDetectException, detect
 
 from core.models import AudioChunk
@@ -56,6 +59,44 @@ MIN_DETECTION_CHARS = 40
 # (truncamento silencioso) nos idiomas via espeak (kokoro/pipeline.py, linha 428). O
 # inglês é imune — o en_tokenize divide respeitando o limite (OS-034).
 MAX_PHONEMES = 510
+
+# Mapa de substituição fonética (OS-037): termos que o G2P do espeak erra sempre.
+# Fica em arquivo versionado ao lado deste módulo para que adicionar uma entrada
+# não exija mexer em código — ver RUNBOOK.md.
+PHONETIC_MAP_PATH = Path(__file__).with_name("phonetic_map.yaml")
+
+
+@functools.lru_cache(maxsize=1)
+def _phonetic_map() -> dict[str, str]:
+    """Carrega o mapa de substituição fonética do YAML versionado; mapa ausente ou ilegível vira mapa vazio (nunca derruba a síntese)."""
+    try:
+        with PHONETIC_MAP_PATH.open(encoding="utf-8") as arquivo:
+            dados = yaml.safe_load(arquivo)
+    # Captura ampla intencional: um mapa quebrado não pode impedir o livro de ser
+    # sintetizado — degrada para "sem substituição", como o fallback de idioma.
+    except Exception:  # noqa: BLE001
+        return {}
+    return {str(k): str(v) for k, v in (dados or {}).items()}
+
+
+def _apply_phonetic_map(text: str) -> str:
+    """Troca os termos do mapa fonético pela grafia que o G2P pronuncia certo, preservando o resto do texto."""
+    # O padrão é derivado do mapa a cada chamada de propósito: cachear os dois
+    # separadamente os deixaria fora de sincronia se o mapa mudasse. O `re` já
+    # mantém cache interno de padrões compilados, então o custo é desprezível.
+    mapa = _phonetic_map()
+    if not mapa:
+        return text
+
+    # Termos mais longos primeiro: evita que um termo curto case antes de um
+    # mais específico que o contenha.
+    alternativas = "|".join(re.escape(t) for t in sorted(mapa, key=len, reverse=True))
+    # (?<!\w) / (?!\w) em vez de \b: também funciona para termos que começam ou
+    # terminam em caractere não-alfanumérico, e nunca casa dentro de outra palavra.
+    padrao = re.compile(rf"(?<!\w)({alternativas})(?!\w)", re.IGNORECASE)
+
+    por_minuscula = {k.lower(): v for k, v in mapa.items()}
+    return padrao.sub(lambda m: por_minuscula[m.group(1).lower()], text)
 
 
 def _phoneme_count(text: str, g2p) -> int:
@@ -145,6 +186,10 @@ class KokoroSpeaker(Speaker):
             lang_code if lang_code is not None else self._detect_lang_code(text)
         )
         voice = voice or VOICE_BY_LANG_CODE[effective_lang_code]
+
+        # OS-037: corrige termos que o G2P erra sempre, ANTES de medir/dividir por
+        # orçamento de fonemas — a substituição muda o tamanho fonêmico do texto.
+        text = _apply_phonetic_map(text)
 
         # OS-034: idiomas via espeak (todos exceto en-us/en-gb) são truncados
         # silenciosamente em 510 fonemas dentro do Kokoro; inglês é dividido pelo
