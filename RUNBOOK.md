@@ -68,6 +68,7 @@ Na primeira vez que o worker processar um livro, o Kokoro baixa os pesos do mode
 4. O áudio começa a tocar assim que o **primeiro trecho** fica pronto, sem esperar o livro inteiro (desde a OS-030) — a barra de progresso continua mostrando quanto falta sintetizar. Se a reprodução alcançar a síntese, o player mostra "Aguardando próximo trecho..." e retoma sozinho quando o trecho seguinte fica pronto.
 5. Testar play/pause, trocar a velocidade (dropdown), recarregar a página (deve oferecer "Retomar de onde parou?").
 6. Pra reabrir um livro processado antes, usar o campo "Abrir livro existente" com o `id` devolvido no upload (aparece na tela e também em `GET /books/{id}/status`).
+7. **"Processar agora"** (desde a OS-032): cada livro da lista que está apenas enfileirado (`uploaded`) ou pausado (`paused`) tem esse botão. Clicar nele pausa a síntese em andamento no fim do chunk corrente (~1s) e coloca o livro escolhido no topo da fila — o livro pausado fica `paused`, com o áudio já gerado tocável, e retoma de onde parou quando for re-priorizado.
 
 ### Testar só a API, sem o navegador
 
@@ -134,6 +135,7 @@ Trocar qualquer um desses nomes exige que a classe correspondente já esteja reg
 - **`retomada inconsistente: existem AudioChunks persistidos até a sequence N...`** — o livro tinha chunks de uma tentativa anterior que não batem com o texto re-extraído agora (o PDF mudou, ou a lógica de limpeza/chunking mudou entre as duas tentativas). O worker **não** apaga nada nesse caso: marca o livro como `error` com essa mensagem e pede reenvio. Reenviar o PDF gera um `book_id` novo e processa do zero.
 - **`sqlite3.OperationalError: table books has no column named chunk_total`** — coluna nova adicionada na OS-024 pra barra de progresso da síntese. Igual ao que já aconteceu com `error_message` na OS-018, não existe migração de schema: um `books.db` local criado antes desta OS precisa ser apagado (ver seção 6, "Resetar tudo") pra recriar o schema com a coluna nova.
 - **`sqlite3.OperationalError: table books has no column named language`** — coluna nova adicionada na OS-025 pra seleção manual de idioma. Mesmo padrão do `chunk_total` (OS-024): sem migração de schema, apagar `books.db` (ver seção 6, "Resetar tudo") pra recriar o schema com a coluna nova.
+- **`sqlite3.OperationalError: table jobs has no column named priority`** — coluna nova adicionada na OS-032 pra preempção de fila ("Processar agora"). Mesmo padrão do `language` (OS-025): sem migração de schema, apagar `books.db` (ver seção 6, "Resetar tudo") pra recriar o schema com a coluna nova.
 - **Livros processados antes da OS-019 têm pronúncia incorreta** — até a OS-019, `KokoroSpeaker` chamava a API errada do Kokoro (`generate_from_tokens` com texto bruto, sem rodar o G2P de verdade), gerando áudio com pronúncia errada em todo livro processado desde a OS-004 (decisão #14 em `docs/PROJECT_STATE.md`). Não há reprocessamento automático — reenviar manualmente qualquer livro que já estava `ready` antes dessa correção pra gerar o áudio de novo com a pronúncia certa.
 
 ## Referências
