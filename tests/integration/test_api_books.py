@@ -42,6 +42,14 @@ class FakeExtractor(Extractor):
         ]
 
 
+class FailingExtractor(Extractor):
+    def supports(self, pdf_path):
+        return True
+
+    def extract(self, pdf_path, page_range=None):
+        raise RuntimeError("boom")
+
+
 class FakeSpeaker(Speaker):
     @property
     def cost_per_char(self):
@@ -96,6 +104,15 @@ def fake_working_pipeline(monkeypatch):
     monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": FakeSpeaker})
 
 
+@pytest.fixture
+def fake_failing_pipeline(monkeypatch):
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": FailingExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": FakeSpeaker})
+
+
 def test_post_books_returns_immediately_without_running_pipeline(
     temp_paths, fake_working_pipeline
 ):
@@ -139,6 +156,38 @@ def test_get_books_status_returns_404_for_unknown_id(temp_paths):
         response = client.get("/books/does-not-exist/status")
 
     assert response.status_code == 404
+
+
+def test_get_books_status_includes_error_message_when_status_is_error(
+    temp_paths, fake_failing_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        job = queue.claim_next()
+        worker_tasks.process_job(job)
+
+        status_response = client.get(f"/books/{book_id}/status")
+
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert body["status"] == "error"
+    assert body["error_message"]
+
+
+def test_get_books_status_omits_error_message_when_status_is_not_error(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        status_response = client.get(f"/books/{book_id}/status")
+
+    assert status_response.status_code == 200
+    assert "error_message" not in status_response.json()
 
 
 def test_end_to_end_post_then_process_job_then_status_reflects_ready(
