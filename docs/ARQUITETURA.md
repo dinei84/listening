@@ -255,6 +255,8 @@ class Chapter(BaseModel):
     title: str
     order: int
     text: str
+    start_page: int = 1   # OS-027: intervalo de páginas (1-based, inclusivo)
+    end_page: int = 1     # que o capítulo cobre no PDF
 
 class AudioChunk(BaseModel):
     chapter_id: str
