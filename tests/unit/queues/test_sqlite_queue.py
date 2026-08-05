@@ -126,3 +126,25 @@ def test_sqlite_queue_requeue_orphaned_returns_empty_list_when_no_running_jobs(
     queue = SQLiteJobQueue(str(tmp_path / "test.db"))
 
     assert queue.requeue_orphaned() == []
+
+
+def test_sqlite_queue_delete_jobs_for_book_removes_only_that_books_jobs(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-a1", book_id="book-a"))
+    queue.enqueue(_job("job-a2", book_id="book-a"))
+    queue.enqueue(_job("job-b1", book_id="book-b"))
+
+    queue.delete_jobs_for_book("book-a")
+
+    assert queue.get_job("job-a1") is None
+    assert queue.get_job("job-a2") is None
+    assert queue.get_job("job-b1") is not None
+
+
+def test_sqlite_queue_delete_jobs_for_book_is_noop_for_unknown_book(tmp_path):
+    queue = SQLiteJobQueue(str(tmp_path / "test.db"))
+    queue.enqueue(_job("job-1", book_id="book-a"))
+
+    queue.delete_jobs_for_book("book-unknown")
+
+    assert queue.get_job("job-1") is not None

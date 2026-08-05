@@ -349,3 +349,71 @@ def test_get_books_audio_returns_partial_chunks_while_synthesizing(
         final_response = client.get(f"/books/{book_id}/audio")
     assert len(final_response.json()) == 3
     assert final_response.json()[2]["sequence"] == 2
+
+
+def test_delete_book_removes_book_chunks_jobs_and_pdf(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        job = queue.claim_next()
+        worker_tasks.process_job(job)
+        assert queue.get_job(job.id) is not None
+
+        chunks_before = audio_store_module.list_chunks(book_id)
+        assert len(chunks_before) == 1
+        wav_path = chunks_before[0].file_path
+        assert os.path.exists(wav_path)
+        assert uploads_module.pdf_path_for(book_id).exists()
+
+        response = client.delete(f"/books/{book_id}")
+
+        assert response.status_code == 200
+        assert db_module.get_book(book_id) is None
+        assert audio_store_module.list_chunks(book_id) == []
+        assert not os.path.exists(wav_path)
+        assert not uploads_module.pdf_path_for(book_id).exists()
+        assert queue.get_job(job.id) is None
+
+        status_response = client.get(f"/books/{book_id}/status")
+    assert status_response.status_code == 404
+
+
+def test_delete_book_returns_404_for_unknown_book(temp_paths):
+    with TestClient(app) as client:
+        response = client.delete("/books/does-not-exist")
+
+    assert response.status_code == 404
+
+
+def test_delete_book_returns_409_while_processing(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+
+        response = client.delete(f"/books/{book_id}")
+
+    assert response.status_code == 409
+    assert db_module.get_book(book_id) is not None
+
+
+def test_delete_book_allowed_when_ready_or_error(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        ready_id = _create_and_process_book(client)
+        ready_response = client.delete(f"/books/{ready_id}")
+
+        create_response = client.post("/books", files=_upload_files())
+        error_id = create_response.json()["id"]
+        db_module.update_book_status(error_id, "error", error_message="boom")
+        error_response = client.delete(f"/books/{error_id}")
+
+        assert ready_response.status_code == 200
+        assert error_response.status_code == 200
+        assert db_module.get_book(ready_id) is None
+        assert db_module.get_book(error_id) is None
+
+        list_response = client.get("/books")
+    assert all(book["id"] not in (ready_id, error_id) for book in list_response.json())
