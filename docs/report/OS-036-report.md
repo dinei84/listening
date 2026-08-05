@@ -132,4 +132,4 @@ Nenhum bloqueio. Três observações para o dono do projeto:
 
 ## 8. Link do PR
 
-*A preencher após abrir o PR.*
+https://github.com/dinei84/listening/pull/32
