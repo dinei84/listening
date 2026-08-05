@@ -190,6 +190,35 @@ def test_get_books_status_omits_error_message_when_status_is_not_error(
     assert "error_message" not in status_response.json()
 
 
+def test_get_books_status_returns_chunks_done_and_chunks_total(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        book_id = _create_and_process_book(client)
+        status_response = client.get(f"/books/{book_id}/status")
+
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert body["status"] == "ready"
+    assert body["chunks_done"] == 1
+    assert body["chunks_total"] == 1
+
+
+def test_get_books_status_chunks_total_is_none_before_synthesis_starts(
+    temp_paths, fake_working_pipeline
+):
+    with TestClient(app) as client:
+        create_response = client.post("/books", files=_upload_files())
+        book_id = create_response.json()["id"]
+        status_response = client.get(f"/books/{book_id}/status")
+
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert body["status"] == "uploaded"
+    assert body["chunks_total"] is None
+    assert body["chunks_done"] == 0
+
+
 def test_end_to_end_post_then_process_job_then_status_reflects_ready(
     temp_paths, fake_working_pipeline
 ):
