@@ -108,4 +108,4 @@ Nenhuma decisão de arquitetura foi tomada fora do que a OS já autorizava expli
 
 ## 8. Link do PR
 
-[a preencher]
+https://github.com/dinei84/listening/pull/19
