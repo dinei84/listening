@@ -274,18 +274,14 @@ def test_worker_process_job_persists_audio_chunks(temp_paths, fake_working_pipel
     assert os.path.exists(chunks[0].file_path)
 
 
-def test_worker_process_job_persists_chunks_incrementally(
-    temp_paths, monkeypatch
-):
+def test_worker_process_job_persists_chunks_incrementally(temp_paths, monkeypatch):
     book = _create_book_and_pdf(temp_paths)
     speaker = RecordingSpeaker(book.id)
     monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
     monkeypatch.setattr(
         registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -307,9 +303,7 @@ def test_worker_process_job_sets_book_status_to_synthesizing_before_ready(
     monkeypatch.setattr(
         registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)

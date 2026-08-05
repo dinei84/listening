@@ -120,7 +120,9 @@ def test_sqlite_queue_requeue_orphaned_ignores_queued_and_done_jobs(tmp_path):
     assert queue.get_job("job-queued").status == "queued"
 
 
-def test_sqlite_queue_requeue_orphaned_returns_empty_list_when_no_running_jobs(tmp_path):
+def test_sqlite_queue_requeue_orphaned_returns_empty_list_when_no_running_jobs(
+    tmp_path,
+):
     queue = SQLiteJobQueue(str(tmp_path / "test.db"))
 
     assert queue.requeue_orphaned() == []

@@ -32,3 +32,11 @@ class JobQueue(ABC):
     def get_job(self, job_id: str) -> Job | None:
         """Busca um Job pelo id. None se não existir."""
         ...
+
+    @abstractmethod
+    def requeue_orphaned(self) -> list[Job]:
+        """Reseta para 'queued' todo Job preso em 'running' e devolve os Jobs resetados.
+        Chamado na inicialização do worker: sem heartbeat/lease não há como distinguir
+        um worker vivo de um que morreu no meio, então assume-se um único worker ativo
+        por vez (decisão #11) e todo 'running' encontrado é tratado como órfão."""
+        ...
