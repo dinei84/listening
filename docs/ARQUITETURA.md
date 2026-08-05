@@ -244,6 +244,8 @@ class Book(BaseModel):
     status: str                    # uploaded | extracting | processing | synthesizing | ready | error
     chapters: list[Chapter] = []
     created_at: datetime
+    error_message: str | None = None
+    chunk_total: int | None = None  # total de chunks de síntese previsto (OS-024); None até a síntese começar
 
 class Job(BaseModel):
     id: str

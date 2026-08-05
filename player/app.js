@@ -13,6 +13,7 @@ const booksListEmpty = document.getElementById("books-list-empty");
 const playerSection = document.getElementById("player-section");
 const playerTitle = document.getElementById("player-title");
 const playerStatus = document.getElementById("player-status");
+const synthesisProgress = document.getElementById("synthesis-progress");
 const audioPlayer = document.getElementById("audio-player");
 const playPauseBtn = document.getElementById("play-pause-btn");
 const speedSelect = document.getElementById("speed-select");
@@ -156,12 +157,24 @@ function stopPolling() {
   }
 }
 
+function renderSynthesisProgress(status, chunksDone, chunksTotal) {
+  if (chunksTotal === null || chunksTotal === undefined) {
+    synthesisProgress.hidden = true;
+    playerStatus.textContent = `Status: ${status}`;
+    return;
+  }
+  synthesisProgress.hidden = false;
+  synthesisProgress.max = chunksTotal;
+  synthesisProgress.value = Math.min(chunksDone, chunksTotal);
+  playerStatus.textContent = `Sintetizando: ${chunksDone} de ${chunksTotal} chunks`;
+}
+
 function pollUntilReady(bookId, onReady, onError) {
   stopPolling();
   const check = async () => {
     try {
-      const { status } = await fetchStatus(bookId);
-      playerStatus.textContent = `Status: ${status}`;
+      const { status, chunks_done, chunks_total } = await fetchStatus(bookId);
+      renderSynthesisProgress(status, chunks_done, chunks_total);
       if (status === "ready") {
         stopPolling();
         onReady();
@@ -204,6 +217,7 @@ async function openBook(bookId, resumeState) {
   pollUntilReady(
     bookId,
     async () => {
+      synthesisProgress.hidden = true;
       chunks = await fetchAudioChunks(bookId);
       if (chunks.length === 0) {
         playerStatus.textContent = "Nenhum áudio disponível.";

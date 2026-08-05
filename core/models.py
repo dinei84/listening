@@ -36,6 +36,7 @@ class Book(BaseModel):
     chapters: list[Chapter] = []
     created_at: datetime
     error_message: str | None = None
+    chunk_total: int | None = None
 
 
 class Job(BaseModel):
