@@ -27,3 +27,12 @@ def test_chunk_text_keeps_oversized_single_sentence_as_one_chunk():
 def test_chunk_text_handles_empty_input():
     assert chunk_text("") == []
     assert chunk_text("   ") == []
+
+
+def test_chunk_text_contract_unchanged():
+    # Contrato da OS-008 (regressão): uma sentença sem .!? interno nunca é
+    # cortada ao meio, mesmo que estoure sozinha o max_chars.
+    long_sentence = " ".join(["palavra"] * 60)
+    chunks = chunk_text(long_sentence, max_chars=50)
+    assert chunks == [long_sentence]
+    assert len(long_sentence) > 50
