@@ -106,4 +106,4 @@ Nenhum bloqueio para fechar esta OS. Uma nota, não uma dúvida sobre esta OS: l
 
 ## 8. Link do PR
 
-https://github.com/dinei84/listening/pull/16 (mesmo PR da OS-018, atualizado com os commits desta OS — conforme instrução no topo do arquivo da própria OS-019)
+https://github.com/dinei84/listening/pull/16 (mesmo PR da OS-018, atualizado com os commits desta OS e com título/descrição cobrindo as duas — conforme instrução no topo do arquivo da própria OS-019)
