@@ -15,6 +15,9 @@ const playerSection = document.getElementById("player-section");
 const playerTitle = document.getElementById("player-title");
 const playerStatus = document.getElementById("player-status");
 const synthesisProgress = document.getElementById("synthesis-progress");
+const positionIndicator = document.getElementById("position-indicator");
+const chaptersSection = document.getElementById("chapters-section");
+const chaptersList = document.getElementById("chapters-list");
 const audioPlayer = document.getElementById("audio-player");
 const playPauseBtn = document.getElementById("play-pause-btn");
 const speedSelect = document.getElementById("speed-select");
@@ -35,6 +38,12 @@ let pendingResume = null;
 let playbackStarted = false;
 let waitingForNextChunk = false;
 let bookStatus = null;
+// Capítulos do livro aberto (OS-027 via GET /books/{id}/chapters). Vazio para livros
+// processados antes daquela OS — a seção fica escondida nesse caso.
+let chapters = [];
+// Total de trechos previsto para o livro (chunks_total da OS-024). Null enquanto a
+// síntese não começou; o indicador cai no que já existe nesse caso.
+let totalChunks = null;
 
 // Vocabulário de status para a UI (OS-033): os valores da API continuam crus no
 // modelo (Book.status), só a exibição traduz. "uploaded" = Job enfileirado,
@@ -104,6 +113,83 @@ async function fetchProgress(bookId) {
   } catch (err) {
     return null;
   }
+}
+
+// Busca os capítulos detectados (OS-027). Lista vazia é resposta legítima: livros
+// processados antes daquela OS não têm capítulos persistidos.
+async function fetchChapters(bookId) {
+  try {
+    const response = await fetch(`/books/${bookId}/chapters`);
+    if (!response.ok) return [];
+    return await response.json();
+  } catch (err) {
+    return [];
+  }
+}
+
+// Qual capítulo contém uma dada sequence. Como o chapter_id vem em cada AudioChunk
+// (OS-027), a associação é direta — sem depender de contagem de chunks por capítulo.
+function chapterOfSequence(sequence) {
+  const chunk = chunks.find((c) => c.sequence === sequence);
+  if (!chunk) return null;
+  return chapters.find((chapter) => chapter.id === chunk.chapter_id) || null;
+}
+
+// Primeiro chunk já sintetizado de um capítulo, ou null se a síntese ainda não
+// chegou nele (livro grande sendo ouvido enquanto sintetiza — OS-030).
+function firstChunkIndexOfChapter(chapterId) {
+  const index = chunks.findIndex((chunk) => chunk.chapter_id === chapterId);
+  return index >= 0 ? index : null;
+}
+
+function renderChapters() {
+  chaptersList.innerHTML = "";
+  chaptersSection.hidden = chapters.length === 0;
+  if (chapters.length === 0) return;
+
+  const atual = currentSequence === null ? null : chapterOfSequence(currentSequence);
+  for (const chapter of chapters) {
+    const li = document.createElement("li");
+    const disponivel = firstChunkIndexOfChapter(chapter.id) !== null;
+
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.textContent = chapter.title;
+    // Capítulo ainda não sintetizado não é clicável: não há áudio para pular.
+    botao.disabled = !disponivel;
+    botao.addEventListener("click", () => {
+      const index = firstChunkIndexOfChapter(chapter.id);
+      if (index !== null) playChunk(index);
+    });
+
+    li.appendChild(botao);
+    if (atual && atual.id === chapter.id) {
+      li.appendChild(document.createTextNode(" ← tocando"));
+    }
+    if (!disponivel) {
+      li.appendChild(document.createTextNode(" (ainda sintetizando)"));
+    }
+    chaptersList.appendChild(li);
+  }
+}
+
+// "Capítulo 2 de 12 — Introdução · trecho 45 de 340"
+function renderPositionIndicator() {
+  if (currentSequence === null || chunks.length === 0) {
+    positionIndicator.hidden = true;
+    return;
+  }
+  const partes = [];
+  const capitulo = chapterOfSequence(currentSequence);
+  if (capitulo) {
+    partes.push(
+      `Capítulo ${capitulo.order + 1} de ${chapters.length} — ${capitulo.title}`
+    );
+  }
+  const total = totalChunks || chunks.length;
+  partes.push(`trecho ${currentSequence + 1} de ${total}`);
+  positionIndicator.textContent = partes.join(" · ");
+  positionIndicator.hidden = false;
 }
 
 async function uploadBook(file) {
@@ -343,6 +429,7 @@ async function pollBook(bookId) {
     currentBookTitle = statusData.title;
     playerTitle.textContent = `Livro: ${statusData.title}`;
   }
+  totalChunks = statusData.chunks_total;
   renderSynthesisProgress(
     bookStatus,
     statusData.chunks_done,
@@ -358,10 +445,24 @@ async function pollBook(bookId) {
   }
   if (bookId !== currentBookId) return;
 
+  // Capítulos podem aparecer depois do primeiro poll: o worker só os persiste
+  // quando começa a processar o livro (OS-027).
+  if (chapters.length === 0) {
+    const fetched = await fetchChapters(bookId);
+    if (bookId !== currentBookId) return;
+    chapters = fetched;
+  }
+
   if (!playbackStarted && chunks.length > 0) {
     startPlayback();
   } else if (waitingForNextChunk && added > 0) {
     playChunk(currentIndex + 1);
+  }
+
+  // Chunks novos podem ter destravado capítulos que ainda não tinham áudio.
+  if (added > 0 || chapters.length > 0) {
+    renderChapters();
+    renderPositionIndicator();
   }
 
   // Livro terminado (ou falho, ou pausado): não há mais chunk novo para
@@ -383,6 +484,9 @@ function playChunk(index, startTime) {
   currentIndex = index;
   currentSequence = chunks[index].sequence;
   waitingForNextChunk = false;
+  // O capítulo em foco e a posição mudam a cada troca de trecho (OS-029).
+  renderChapters();
+  renderPositionIndicator();
   audioPlayer.src = chunks[index].url;
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
 
@@ -410,8 +514,13 @@ function resetPlaybackState() {
   waitingForNextChunk = false;
   bookStatus = null;
   pendingResume = null;
+  chapters = [];
+  totalChunks = null;
   resumeBanner.hidden = true;
   synthesisProgress.hidden = true;
+  positionIndicator.hidden = true;
+  chaptersSection.hidden = true;
+  chaptersList.innerHTML = "";
 }
 
 async function openBook(bookId, resumeState, title) {
