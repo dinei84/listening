@@ -172,11 +172,18 @@ class JobQueue(ABC):
         um worker vivo de um que morreu no meio, então assume-se um único worker ativo
         por vez (decisão #11) e todo 'running' encontrado é tratado como órfão."""
         ...
+
+    @abstractmethod
+    def delete_jobs_for_book(self, book_id: str) -> None:
+        """Remove todos os Jobs de um book_id. Nenhum efeito se não houver Jobs."""
+        ...
 ```
 
 Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, resolvida via `registry`/`config` (mesma regra da seção 4.4) — nunca importa `SQLiteJobQueue` diretamente.
 
 `requeue_orphaned()` foi adicionado na OS-022 como extensão aditiva do contrato original da OS-011 — nada foi removido ou alterado, mas toda implementação de `JobQueue` precisa passar a tê-lo. **Limitação conhecida e aceita:** o método assume um único worker ativo por vez. Com dois workers rodando ao mesmo tempo, o segundo a iniciar devolveria para a fila o Job que o primeiro está processando de verdade. Resolver isso exigiria heartbeat/lease por `Job` — fora do escopo de um projeto pessoal com um worker só (ver `docs/os/OS-022-retomar-processamento.md` seção 2).
+
+`delete_jobs_for_book()` foi adicionado na OS-023 como extensão aditiva — usado pelo `DELETE /books/{id}` para limpar os `Job`s de um livro apagado. Mesmo padrão do `requeue_orphaned()`: nada existente muda de comportamento.
 
 ### 4.4 Registro de plugins
 

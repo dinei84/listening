@@ -142,3 +142,12 @@ class SQLiteJobQueue(JobQueue):
             status=row[3],
             error_message=row[4],
         )
+
+    def delete_jobs_for_book(self, book_id: str) -> None:
+        """Remove todos os Jobs de um book_id."""
+        conn = self._connect()
+        try:
+            conn.execute("DELETE FROM jobs WHERE book_id = ?", (book_id,))
+            conn.commit()
+        finally:
+            conn.close()
