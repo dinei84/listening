@@ -127,4 +127,4 @@ Nenhum bloqueio para fechar esta OS. Duas notas para o dono do projeto avaliar d
 
 ## 8. Link do PR
 
-[a preencher após abertura do PR]
+https://github.com/dinei84/listening/pull/16
