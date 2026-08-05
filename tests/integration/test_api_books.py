@@ -742,3 +742,19 @@ def test_delete_book_also_removes_reading_progress(temp_paths):
 
     assert delete_response.status_code == 200
     assert progress_store_module.get_progress(book_id) is None
+
+
+def test_get_books_audio_returns_chapter_id_per_chunk(
+    temp_paths, fake_working_pipeline
+):
+    """OS-029: o player mapeia trecho → capítulo pelo chapter_id que vem em cada chunk."""
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        worker_tasks.process_job(queue.claim_next())
+
+        body = client.get(f"/books/{book_id}/audio").json()
+
+    assert len(body) > 0
+    assert all("chapter_id" in chunk for chunk in body)
+    assert all(chunk["chapter_id"] for chunk in body)

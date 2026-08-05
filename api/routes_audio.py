@@ -17,6 +17,9 @@ async def list_book_audio(book_id: str) -> list[dict]:
     return [
         {
             "sequence": chunk.sequence,
+            # chapter_id acompanha cada chunk desde a OS-027; exposto aqui na OS-029
+            # para o player mapear trecho → capítulo sem uma chamada extra.
+            "chapter_id": chunk.chapter_id,
             "duration_seconds": chunk.duration_seconds,
             "url": f"/books/{book_id}/audio/{chunk.sequence}",
         }

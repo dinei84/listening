@@ -30,3 +30,40 @@ def test_player_upload_form_has_language_select_with_auto_default(
     html = response.text
     assert 'id="language-select"' in html
     assert '<option value="">Automático</option>' in html
+
+
+def test_player_has_chapter_list_section(tmp_path, monkeypatch):
+    """OS-029: o player precisa ter onde renderizar o seletor de capítulos."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        html = client.get("/").text
+
+    assert 'id="chapters-list"' in html
+
+
+def test_player_has_position_indicator(tmp_path, monkeypatch):
+    """OS-029: indicador de 'onde estou no livro'."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        html = client.get("/").text
+
+    assert 'id="position-indicator"' in html
+
+
+def test_player_js_consumes_chapters_and_progress_endpoints(tmp_path, monkeypatch):
+    """OS-029 só consome o que as OS-027/028 entregaram — sem backend novo."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        js = client.get("/app.js").text
+
+    assert "/chapters" in js
+    assert "/progress" in js
