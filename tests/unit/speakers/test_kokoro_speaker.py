@@ -4,8 +4,8 @@ import pytest
 import torch
 
 from core.models import AudioChunk
-from plugins.speakers.base import Speaker
 from plugins.speakers import kokoro_speaker as kokoro_speaker_module
+from plugins.speakers.base import Speaker
 from plugins.speakers.kokoro_speaker import KokoroSpeaker
 
 PT_TEXT = (
@@ -388,9 +388,7 @@ def test_text_without_mapped_terms_is_unchanged(pipeline_factory, monkeypatch):
     assert texto == original
 
 
-def test_missing_or_empty_map_does_not_break_synthesis(
-    pipeline_factory, monkeypatch
-):
+def test_missing_or_empty_map_does_not_break_synthesis(pipeline_factory, monkeypatch):
     monkeypatch.setattr(kokoro_speaker_module, "_phonetic_map", dict)
     speaker = KokoroSpeaker()
     original = "Texto qualquer com UML e API."
@@ -402,9 +400,7 @@ def test_missing_or_empty_map_does_not_break_synthesis(
     assert chunk.engine_used == "kokoro"
 
 
-def test_phonetic_map_does_not_change_audio_chunk_count(
-    pipeline_factory, monkeypatch
-):
+def test_phonetic_map_does_not_change_audio_chunk_count(pipeline_factory, monkeypatch):
     """Regressão OS-021/034: a substituição continua produzindo UM AudioChunk."""
     monkeypatch.setattr(
         kokoro_speaker_module, "_phonetic_map", lambda: {"UML": "u ême ele"}

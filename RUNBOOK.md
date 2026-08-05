@@ -115,6 +115,33 @@ rm -rf books.db uploads storage/audio
 
 (a API recria o schema do zero automaticamente na próxima subida, via `lifespan` em `api/main.py`)
 
+## 6.1 Dicionário fonético (pronúncia de termos específicos)
+
+O Kokoro fonemiza português com **espeak-ng**, um motor baseado em regras — por isso alguns termos (siglas, estrangeirismos, nomes próprios) saem com pronúncia errada. O arquivo `plugins/speakers/phonetic_map.yaml` corrige termo a termo:
+
+```yaml
+JSON: djêizon         # chave = como aparece no texto; valor = grafia que o G2P acerta
+```
+
+A troca acontece antes da fonemização, respeita fronteira de palavra (não casa dentro de outra palavra) e ignora maiúsculas/minúsculas na busca.
+
+**Para adicionar uma entrada, verifique antes se ela realmente melhora** — comparando o G2P **dentro de uma frase**, não com o termo isolado (o espeak lê o mesmo termo de formas diferentes conforme o contexto):
+
+```bash
+python -c "
+import kokoro
+from plugins.speakers.kokoro_speaker import _apply_phonetic_map
+pt = kokoro.KPipeline(lang_code='p', repo_id='hexgrad/Kokoro-82M', model=False)
+frase = 'O arquivo JSON foi salvo.'
+print('antes :', pt.g2p(frase)[0])
+print('depois:', pt.g2p(_apply_phonetic_map(frase))[0])
+"
+```
+
+Se a fonemização não melhorar, **não adicione** — uma "correção" pior que o erro original só piora o áudio. Na OS-037 o termo `cache` foi testado e rejeitado por isso (`kˈaʃy` ficou melhor que `kˈɛksi`).
+
+O mapa é lido uma vez por processo. Arquivo ausente ou malformado degrada para "sem substituição" — nunca derruba a síntese; reinicie o worker depois de editar.
+
 ## 7. Configuração
 
 `config.yaml` na raiz define qual plugin usar em cada categoria:
