@@ -117,3 +117,15 @@ def get_chunk(
         duration_seconds=row[3],
         engine_used=row[4],
     )
+
+
+def delete_chunks(book_id: str, db_path: str | None = None) -> None:
+    """Remove os AudioChunk de um book_id (linhas do banco e diretório de áudio do disco)."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute("DELETE FROM audio_chunks WHERE book_id = ?", (book_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+    shutil.rmtree(AUDIO_DIR / book_id, ignore_errors=True)

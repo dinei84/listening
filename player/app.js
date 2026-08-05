@@ -85,10 +85,48 @@ function renderBooksList(books) {
   booksListEmpty.textContent = "Nenhum livro ainda.";
   for (const book of books) {
     const li = document.createElement("li");
-    li.textContent = `${book.title} — ${book.status} — ${formatCreatedAt(book.created_at)}`;
+    const label = document.createElement("span");
+    label.textContent = `${book.title} — ${book.status} — ${formatCreatedAt(book.created_at)}`;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Deletar";
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteBook(book.id);
+    });
+
     li.dataset.bookId = book.id;
     li.addEventListener("click", () => openBook(book.id, null));
+    li.appendChild(label);
+    li.appendChild(deleteBtn);
     booksList.appendChild(li);
+  }
+}
+
+async function deleteBook(bookId) {
+  if (!window.confirm("Deletar este livro? O áudio e o PDF serão removidos.")) {
+    return;
+  }
+  try {
+    const response = await fetch(`/books/${bookId}`, { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error("Falha ao deletar o livro");
+    }
+    if (currentBookId === bookId) {
+      stopPolling();
+      audioPlayer.pause();
+      audioPlayer.removeAttribute("src");
+      audioPlayer.load();
+      playerSection.hidden = true;
+      chunks = [];
+      currentBookId = null;
+      pendingResume = null;
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    refreshBooksList();
+  } catch (err) {
+    window.alert(`Erro ao deletar: ${err.message}`);
   }
 }
 

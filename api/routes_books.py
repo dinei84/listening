@@ -7,9 +7,14 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from core import config as config_module
 from core.models import Book, Job
 from plugins import registry as registry_module
-from storage import db, uploads
+from storage import audio_store, db, uploads
 
 router = APIRouter()
+
+# Status em que o worker ainda pode estar escrevendo arquivos/linhas do livro:
+# deletar agora arriscaria remover algo em uso ou um update_book_status sobre
+# um book_id que não existe mais.
+_BLOCKED_DELETE_STATUSES = {"uploaded", "extracting", "processing", "synthesizing"}
 
 
 @router.post("/books")
@@ -63,3 +68,21 @@ async def get_book_status(book_id: str) -> dict[str, str | None]:
     if book.status == "error":
         response["error_message"] = book.error_message
     return response
+
+
+@router.delete("/books/{book_id}")
+async def delete_book(book_id: str) -> dict[str, str]:
+    """Remove um Book e todo o seu rastro (áudio, jobs, PDF). 404 se não existir; 409 se o processamento ainda está em andamento."""
+    book = db.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if book.status in _BLOCKED_DELETE_STATUSES:
+        raise HTTPException(status_code=409, detail="Book is still processing")
+
+    cfg = config_module.load_config()
+    queue = registry_module.QUEUES[cfg.queue]()
+    queue.delete_jobs_for_book(book_id)
+    audio_store.delete_chunks(book_id)
+    uploads.delete_pdf(book_id)
+    db.delete_book(book_id)
+    return {"id": book_id, "status": "deleted"}

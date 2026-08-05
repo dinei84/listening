@@ -116,3 +116,13 @@ def update_book_status(
         conn.commit()
     finally:
         conn.close()
+
+
+def delete_book(book_id: str, db_path: str | None = None) -> None:
+    """Remove a linha de um Book existente. Nenhum efeito se o book_id não existir."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute("DELETE FROM books WHERE id = ?", (book_id,))
+        conn.commit()
+    finally:
+        conn.close()

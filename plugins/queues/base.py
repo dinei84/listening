@@ -40,3 +40,8 @@ class JobQueue(ABC):
         um worker vivo de um que morreu no meio, então assume-se um único worker ativo
         por vez (decisão #11) e todo 'running' encontrado é tratado como órfão."""
         ...
+
+    @abstractmethod
+    def delete_jobs_for_book(self, book_id: str) -> None:
+        """Remove todos os Jobs de um book_id. Nenhum efeito se não houver Jobs."""
+        ...
