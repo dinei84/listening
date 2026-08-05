@@ -54,7 +54,7 @@ class FakeSpeaker(Speaker):
     def cost_per_char(self):
         return 0.0
 
-    def synthesize(self, text, voice=None):
+    def synthesize(self, text, voice=None, lang_code=None):
         fd, path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as f:
             f.write(b"RIFF-fake-wav-bytes")
@@ -95,18 +95,20 @@ class RecordingSpeaker(Speaker):
         self.chunks_in_db_at_call = []
         self.statuses_at_call = []
         self.chunk_total_at_call = []
+        self.lang_codes = []
 
     @property
     def cost_per_char(self):
         return 0.0
 
-    def synthesize(self, text, voice=None):
+    def synthesize(self, text, voice=None, lang_code=None):
         self.chunks_in_db_at_call.append(
             len(audio_store_module.list_chunks(self.book_id))
         )
         fetched = db_module.get_book(self.book_id)
         self.statuses_at_call.append(fetched.status)
         self.chunk_total_at_call.append(fetched.chunk_total)
+        self.lang_codes.append(lang_code)
         fd, path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as f:
             f.write(b"RIFF-fake-wav-bytes")
@@ -129,7 +131,7 @@ class CountingSpeaker(Speaker):
     def cost_per_char(self):
         return 0.0
 
-    def synthesize(self, text, voice=None):
+    def synthesize(self, text, voice=None, lang_code=None):
         self.synthesized_texts.append(text)
         fd, path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as f:
@@ -205,7 +207,7 @@ def _persist_previous_chunk(book_id, sequence):
     )
 
 
-def _create_book_and_pdf(upload_dir, book_id="book-1"):
+def _create_book_and_pdf(upload_dir, book_id="book-1", language=None):
     upload_dir.mkdir(parents=True, exist_ok=True)
     uploads_module.pdf_path_for(book_id).write_bytes(b"%PDF-1.4 fake content")
     db_module.init_db()
@@ -215,6 +217,7 @@ def _create_book_and_pdf(upload_dir, book_id="book-1"):
         original_filename="test.pdf",
         status="uploaded",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        language=language,
     )
     db_module.create_book(book)
     return book
@@ -409,3 +412,41 @@ def test_worker_process_job_sets_book_chunk_total_before_synthesizing(
 
     assert speaker.chunk_total_at_call == [3, 3, 3]
     assert db_module.get_book(book.id).chunk_total == 3
+
+
+def test_worker_process_job_passes_book_language_to_pipeline(temp_paths, monkeypatch):
+    book = _create_book_and_pdf(temp_paths, language="pt")
+    speaker = RecordingSpeaker(book.id)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert speaker.lang_codes == ["p", "p", "p"]
+    assert db_module.get_book(book.id).status == "ready"
+
+
+def test_worker_process_job_passes_none_lang_code_without_book_language(
+    temp_paths, monkeypatch
+):
+    book = _create_book_and_pdf(temp_paths)
+    speaker = RecordingSpeaker(book.id)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert speaker.lang_codes == [None, None, None]
+    assert db_module.get_book(book.id).status == "ready"

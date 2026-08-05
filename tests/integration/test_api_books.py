@@ -55,7 +55,7 @@ class FakeSpeaker(Speaker):
     def cost_per_char(self):
         return 0.0
 
-    def synthesize(self, text, voice=None):
+    def synthesize(self, text, voice=None, lang_code=None):
         fd, path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as f:
             f.write(b"RIFF-fake-wav-bytes")
@@ -329,7 +329,7 @@ def test_get_books_audio_returns_partial_chunks_while_synthesizing(
         def cost_per_char(self):
             return 0.0
 
-        def synthesize(self, text, voice=None):
+        def synthesize(self, text, voice=None, lang_code=None):
             self.call_count += 1
             if self.call_count == 2:
                 observations["status"] = self._client.get(
@@ -446,3 +446,38 @@ def test_delete_book_allowed_when_ready_or_error(temp_paths, fake_working_pipeli
 
         list_response = client.get("/books")
     assert all(book["id"] not in (ready_id, error_id) for book in list_response.json())
+
+
+def test_create_book_persists_chosen_language(temp_paths, fake_working_pipeline):
+    files = _upload_files()
+    files["language"] = (None, "pt")
+
+    with TestClient(app) as client:
+        response = client.post("/books", files=files)
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.language == "pt"
+
+
+def test_create_book_without_language_defaults_to_auto(temp_paths, fake_working_pipeline):
+    with TestClient(app) as client:
+        response = client.post("/books", files=_upload_files())
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.language is None
+
+
+def test_create_book_with_invalid_language_falls_back_to_auto(
+    temp_paths, fake_working_pipeline
+):
+    files = _upload_files()
+    files["language"] = (None, "xx")
+
+    with TestClient(app) as client:
+        response = client.post("/books", files=files)
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.language is None

@@ -49,6 +49,25 @@ def test_db_create_and_get_book_roundtrip(tmp_path):
     assert fetched.status == book.status
 
 
+def test_db_create_and_get_book_roundtrip_persists_language(tmp_path):
+    db_path = str(tmp_path / "test.db")
+    db.init_db(db_path)
+    book = Book(
+        id="book-pt",
+        title="Test Book",
+        original_filename="test.pdf",
+        status="uploaded",
+        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+        language="pt",
+    )
+
+    db.create_book(book, db_path)
+    fetched = db.get_book(book.id, db_path)
+
+    assert fetched is not None
+    assert fetched.language == "pt"
+
+
 def test_db_update_book_status(tmp_path):
     db_path = str(tmp_path / "test.db")
     db.init_db(db_path)
