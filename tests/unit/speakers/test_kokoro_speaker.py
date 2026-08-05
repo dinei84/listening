@@ -8,37 +8,30 @@ from plugins.speakers.base import Speaker
 from plugins.speakers.kokoro_speaker import KokoroSpeaker
 
 
+def _fake_result(num_samples=100):
+    class FakeResult:
+        def __init__(self):
+            self.output = type("Output", (), {"audio": torch.ones(1, num_samples)})()
+
+    return FakeResult()
+
+
 class FakePipeline:
-    def generate_from_tokens(self, text, voice, speed):
-        class FakeResult:
-            def __init__(self):
-                self.output = type("Output", (), {"audio": torch.zeros(1, 24000)})()
-
-        yield FakeResult()
+    def __call__(self, text, voice, speed):
+        yield _fake_result(num_samples=24000)
 
 
-class SplitAwarePipeline:
-    """Simula o comportamento real do Kokoro: rejeita texto acima de um limite de caracteres."""
+class RecordingPipeline:
+    """Simula o Kokoro dividindo um texto longo sozinho: uma chamada, N Results."""
 
-    def __init__(self, limit):
-        self.limit = limit
+    def __init__(self, num_results=1):
+        self.num_results = num_results
         self.calls = []
 
-    def generate_from_tokens(self, text, voice, speed):
-        self.calls.append(text)
-        if len(text) > self.limit:
-            raise ValueError(f"Phoneme string too long: {len(text)} > {self.limit}")
-
-        class FakeResult:
-            def __init__(self):
-                self.output = type("Output", (), {"audio": torch.ones(1, 100)})()
-
-        yield FakeResult()
-
-
-class AlwaysRejectingPipeline:
-    def generate_from_tokens(self, text, voice, speed):
-        raise ValueError(f"Phoneme string too long: {len(text)} > 510")
+    def __call__(self, text, voice, speed):
+        self.calls.append((text, voice, speed))
+        for _ in range(self.num_results):
+            yield _fake_result()
 
 
 def test_speaker_cannot_be_instantiated_directly():
@@ -70,40 +63,27 @@ def test_kokoro_speaker_synthesize_writes_audio_file(monkeypatch):
     os.remove(chunk.file_path)
 
 
-def test_kokoro_speaker_splits_and_retries_on_phoneme_limit_error(monkeypatch):
-    fake_pipeline = SplitAwarePipeline(limit=20)
-    monkeypatch.setattr(KokoroSpeaker, "_get_pipeline", lambda self: fake_pipeline)
-    speaker = KokoroSpeaker()
-    long_text = "one two three four five six seven eight nine ten"
-
-    chunk = speaker.synthesize(long_text, voice="default")
-
-    assert isinstance(chunk, AudioChunk)
-    assert len(fake_pipeline.calls) > 1
-    assert fake_pipeline.calls[0] == long_text
-    assert any(len(call) < len(long_text) for call in fake_pipeline.calls[1:])
-    os.remove(chunk.file_path)
-
-
-def test_kokoro_speaker_returns_single_audio_chunk_after_split_retry(monkeypatch):
-    fake_pipeline = SplitAwarePipeline(limit=20)
+def test_kokoro_speaker_calls_pipeline_directly_not_generate_from_tokens(monkeypatch):
+    fake_pipeline = RecordingPipeline(num_results=1)
     monkeypatch.setattr(KokoroSpeaker, "_get_pipeline", lambda self: fake_pipeline)
     speaker = KokoroSpeaker()
 
-    chunk = speaker.synthesize(
-        "one two three four five six seven eight nine ten", voice="default"
-    )
+    chunk = speaker.synthesize("Hello world", voice="default")
 
-    assert isinstance(chunk, AudioChunk)
-    assert chunk.duration_seconds > 0
+    assert fake_pipeline.calls == [("Hello world", "default", 1.0)]
     os.remove(chunk.file_path)
 
 
-def test_kokoro_speaker_gives_up_with_clear_error_if_split_does_not_help(monkeypatch):
-    monkeypatch.setattr(
-        KokoroSpeaker, "_get_pipeline", lambda self: AlwaysRejectingPipeline()
-    )
+def test_kokoro_speaker_concatenates_multiple_results_into_single_audio_chunk(
+    monkeypatch,
+):
+    fake_pipeline = RecordingPipeline(num_results=3)
+    monkeypatch.setattr(KokoroSpeaker, "_get_pipeline", lambda self: fake_pipeline)
     speaker = KokoroSpeaker()
 
-    with pytest.raises(RuntimeError, match="fonema"):
-        speaker.synthesize("supercalifragilisticexpialidocious", voice="default")
+    chunk = speaker.synthesize("um texto longo o suficiente para virar 3 pedaços")
+
+    assert isinstance(chunk, AudioChunk)
+    assert len(fake_pipeline.calls) == 1
+    assert chunk.duration_seconds == pytest.approx(300 / 24000)
+    os.remove(chunk.file_path)
