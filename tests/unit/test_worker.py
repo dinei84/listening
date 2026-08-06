@@ -19,11 +19,18 @@ from worker import tasks as worker_tasks
 
 class FakeConfig:
     def __init__(
-        self, extractor="fake_extractor", speaker="fake_speaker", queue="sqlite"
+        self,
+        extractor="fake_extractor",
+        speaker="fake_speaker",
+        queue="sqlite",
+        max_cost_per_book=None,
+        fallback_speaker="kokoro",
     ):
         self.extractor = extractor
         self.speaker = speaker
         self.queue = queue
+        self.max_cost_per_book = max_cost_per_book
+        self.fallback_speaker = fallback_speaker
 
 
 class FakeExtractor(Extractor):

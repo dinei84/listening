@@ -23,7 +23,10 @@ def init_db(db_path: str | None = None) -> None:
                 created_at TEXT NOT NULL,
                 error_message TEXT,
                 chunk_total INTEGER,
-                language TEXT
+                language TEXT,
+                estimated_cost REAL,
+                cost_confirmed INTEGER NOT NULL DEFAULT 0,
+                cost_degraded INTEGER NOT NULL DEFAULT 0
             )
             """)
         # `order` é palavra reservada no SQL, daí a coluna se chamar chapter_order.
@@ -51,8 +54,8 @@ def create_book(book: Book, db_path: str | None = None) -> None:
     try:
         conn.execute(
             "INSERT INTO books "
-            "(id, title, original_filename, status, created_at, error_message, chunk_total, language) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 book.id,
                 book.title,
@@ -62,6 +65,9 @@ def create_book(book: Book, db_path: str | None = None) -> None:
                 book.error_message,
                 book.chunk_total,
                 book.language,
+                book.estimated_cost,
+                int(book.cost_confirmed),
+                int(book.cost_degraded),
             ),
         )
         conn.commit()
@@ -74,7 +80,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -93,6 +99,9 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         error_message=row[5],
         chunk_total=row[6],
         language=row[7],
+        estimated_cost=row[8],
+        cost_confirmed=bool(row[9]),
+        cost_degraded=bool(row[10]),
     )
 
 
@@ -101,7 +110,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -117,6 +126,9 @@ def list_books(db_path: str | None = None) -> list[Book]:
             error_message=row[5],
             chunk_total=row[6],
             language=row[7],
+            estimated_cost=row[8],
+            cost_confirmed=bool(row[9]),
+            cost_degraded=bool(row[10]),
         )
         for row in rows
     ]
@@ -158,6 +170,51 @@ def set_book_chunk_total(
     try:
         conn.execute(
             "UPDATE books SET chunk_total = ? WHERE id = ?", (chunk_total, book_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_book_estimated_cost(
+    book_id: str, estimated_cost: float, db_path: str | None = None
+) -> None:
+    """Persiste a estimativa de custo de um Book (OS-042), calculada antes da síntese."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "UPDATE books SET estimated_cost = ? WHERE id = ?",
+            (estimated_cost, book_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_book_cost_confirmed(
+    book_id: str, confirmed: bool, db_path: str | None = None
+) -> None:
+    """Marca a confirmação explícita de custo de um Book (OS-042)."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "UPDATE books SET cost_confirmed = ? WHERE id = ?",
+            (int(confirmed), book_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_book_cost_degraded(
+    book_id: str, degraded: bool, db_path: str | None = None
+) -> None:
+    """Marca que um Book foi degradado para a voz local por estourar o teto de custo (OS-042)."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "UPDATE books SET cost_degraded = ? WHERE id = ?",
+            (int(degraded), book_id),
         )
         conn.commit()
     finally:

@@ -1,3 +1,8 @@
 extractor: pymupdf
 speaker: kokoro
 queue: sqlite
+# Teto de segurança por livro (OS-042): se a estimativa de custo de um livro
+# ultrapassar este valor, ele NÃO usa o Speaker pago mesmo com confirmação —
+# degrada para a voz local (fallback_speaker) com aviso ao usuário.
+# null = sem teto (qualquer estimativa segue o fluxo normal de confirmação).
+max_cost_per_book: null

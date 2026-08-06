@@ -128,6 +128,8 @@ class Speaker(ABC):
 
 `lang_code` foi adicionado na OS-025 como extensão aditiva do contrato (mesmo padrão das OS-021/022): força um idioma específico do engine, pulando a detecção automática; `None` preserva o comportamento anterior (para o `KokoroSpeaker`, detecção automática por chunk via `langdetect`, OS-020). O código é o do engine (`a`, `p`, `e`... no Kokoro), não o do `langdetect` — a tradução entre o que a API/UI expõe (`en`, `pt`, `es`...) e o código do engine fica a cargo de quem chama (`worker/tasks.py`, via `LANG_CODE_BY_LANGUAGE`).
 
+`cost_per_char` é **lido pela trava de custo (OS-042)**, não mais um gancho dormante: `core/pipeline.py::estimate_cost()` calcula `len(texto_sanitizado) × cost_per_char` do Speaker configurado, e o worker persiste a estimativa no `Book` antes de qualquer chamada de síntese. Livro com estimativa > 0 sem confirmação explícita fica em `pending_confirmation` (`POST /books/{id}/confirm` re-enfileira); estimativa acima do teto `max_cost_per_book` de `config.yaml` degrada para a voz local (`fallback_speaker`, padrão `kokoro`) mesmo confirmado — nunca roda o Speaker pago nesse caso.
+
 Regra de decisão do pipeline: usar o Speaker definido em `config.yaml` como padrão (ex: `kokoro`). Só usar um Speaker cloud quando o usuário explicitamente pedir "voz premium" para aquele livro/capítulo.
 
 ### 4.3 JobQueue (fila de jobs)

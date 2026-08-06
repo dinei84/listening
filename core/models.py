@@ -42,12 +42,18 @@ class Book(BaseModel):
         "ready",
         "error",
         "paused",
+        "pending_confirmation",
     ]
     chapters: list[Chapter] = []
     created_at: datetime
     error_message: str | None = None
     chunk_total: int | None = None
     language: str | None = None
+    # Trava de custo (OS-042): estimativa persistida, flag de confirmação explícita
+    # e flag de degradação para voz local quando a estimativa estoura o teto.
+    estimated_cost: float | None = None
+    cost_confirmed: bool = False
+    cost_degraded: bool = False
 
 
 class ReadingProgress(BaseModel):

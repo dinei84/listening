@@ -21,11 +21,18 @@ from worker import tasks as worker_tasks
 
 class FakeConfig:
     def __init__(
-        self, extractor="fake_extractor", speaker="fake_speaker", queue="sqlite"
+        self,
+        extractor="fake_extractor",
+        speaker="fake_speaker",
+        queue="sqlite",
+        max_cost_per_book=None,
+        fallback_speaker="kokoro",
     ):
         self.extractor = extractor
         self.speaker = speaker
         self.queue = queue
+        self.max_cost_per_book = max_cost_per_book
+        self.fallback_speaker = fallback_speaker
 
 
 class FakeExtractor(Extractor):
@@ -758,3 +765,120 @@ def test_get_books_audio_returns_chapter_id_per_chunk(
     assert len(body) > 0
     assert all("chapter_id" in chunk for chunk in body)
     assert all(chunk["chapter_id"] for chunk in body)
+
+
+# --- OS-042: trava de custo ---------------------------------------------------
+
+
+class FakePaidSpeaker(Speaker):
+    """Speaker pago fictício (cost_per_char > 0) para exercitar a trava de custo."""
+
+    @property
+    def cost_per_char(self):
+        return 0.001
+
+    def synthesize(self, text, voice=None, lang_code=None):
+        fd, path = tempfile.mkstemp(suffix=".wav")
+        with os.fdopen(fd, "wb") as f:
+            f.write(b"RIFF-fake-wav-bytes")
+        return AudioChunk(
+            chapter_id="",
+            sequence=0,
+            file_path=path,
+            duration_seconds=1.0,
+            engine_used="fake_paid_speaker",
+        )
+
+
+@pytest.fixture
+def fake_paid_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        config_module, "load_config", lambda: FakeConfig(speaker="fake_paid_speaker")
+    )
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": FakeExtractor}
+    )
+    monkeypatch.setattr(
+        registry_module,
+        "SPEAKERS",
+        {"fake_paid_speaker": FakePaidSpeaker, "kokoro": FakeSpeaker},
+    )
+
+
+def test_status_exposes_cost_estimate_fields(
+    temp_paths, fake_paid_pipeline
+):
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+
+        status_response = client.get(f"/books/{book_id}/status")
+
+    assert status_response.status_code == 200
+    body = status_response.json()
+    assert "estimated_cost" in body
+    assert "cost_confirmed" in body
+    assert "cost_degraded" in body
+
+
+def test_paid_book_waits_for_confirmation_after_worker(
+    temp_paths, fake_paid_pipeline
+):
+    """Livro pago: o worker extrai, estima e para aguardando confirmação — sem áudio."""
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        worker_tasks.process_job(queue.claim_next())
+
+        body = client.get(f"/books/{book_id}/status").json()
+
+    assert body["status"] == "pending_confirmation"
+    assert body["estimated_cost"] == pytest.approx(
+        len("Some extracted text.") * 0.001
+    )
+    assert body["cost_confirmed"] is False
+    assert client.get(f"/books/{book_id}/audio").json() == []
+
+
+def test_confirm_endpoint_confirms_and_reprocesses(
+    temp_paths, fake_paid_pipeline
+):
+    """Confirmar a estimativa re-enfileira o processamento e o livro chega a ready."""
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+        queue = sqlite_queue_module.SQLiteJobQueue()
+        worker_tasks.process_job(queue.claim_next())
+        assert client.get(f"/books/{book_id}/status").json()["status"] == (
+            "pending_confirmation"
+        )
+
+        confirm_response = client.post(f"/books/{book_id}/confirm")
+
+        assert confirm_response.status_code == 200
+        assert confirm_response.json()["status"] == "confirmed"
+        assert (
+            client.get(f"/books/{book_id}/status").json()["cost_confirmed"] is True
+        )
+
+        worker_tasks.process_job(queue.claim_next())
+        body = client.get(f"/books/{book_id}/status").json()
+        assert body["status"] == "ready"
+        assert len(client.get(f"/books/{book_id}/audio").json()) == 1
+
+
+def test_confirm_endpoint_returns_404_for_unknown_book(temp_paths):
+    with TestClient(app) as client:
+        response = client.post("/books/nao-existe/confirm")
+
+    assert response.status_code == 404
+
+
+def test_confirm_endpoint_returns_409_for_book_not_waiting(
+    temp_paths, fake_working_pipeline
+):
+    """Livro de custo zero nunca entra em pending_confirmation — confirmar é 409."""
+    with TestClient(app) as client:
+        book_id = client.post("/books", files=_upload_files()).json()["id"]
+
+        response = client.post(f"/books/{book_id}/confirm")
+
+    assert response.status_code == 409

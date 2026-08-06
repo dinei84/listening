@@ -13,6 +13,10 @@ class Config:
     extractor: str
     speaker: str
     queue: str
+    # Teto de segurança por livro (OS-042): estimativa acima disso não roda o Speaker
+    # pago mesmo com confirmação — degrada para a voz local (fallback_speaker).
+    max_cost_per_book: float | None = None
+    fallback_speaker: str = "kokoro"
 
 
 def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
@@ -20,5 +24,9 @@ def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
     with open(path) as f:
         data = yaml.safe_load(f)
     return Config(
-        extractor=data["extractor"], speaker=data["speaker"], queue=data["queue"]
+        extractor=data["extractor"],
+        speaker=data["speaker"],
+        queue=data["queue"],
+        max_cost_per_book=data.get("max_cost_per_book"),
+        fallback_speaker=data.get("fallback_speaker", "kokoro"),
     )
