@@ -2,6 +2,9 @@ const STORAGE_KEY = "audiobook_player_state_v1";
 const POLL_INTERVAL_MS = 2000;
 const SAVE_THROTTLE_MS = 3000;
 const WAITING_MESSAGE = "Aguardando próximo trecho...";
+// Acima de ~3s no trecho corrente, "Anterior" reinicia o trecho (padrão de
+// podcast); abaixo disso, volta para o trecho anterior (OS-039).
+const PREV_RESTART_THRESHOLD_S = 3;
 
 const uploadForm = document.getElementById("upload-form");
 const pdfInput = document.getElementById("pdf-input");
@@ -19,7 +22,9 @@ const positionIndicator = document.getElementById("position-indicator");
 const chaptersSection = document.getElementById("chapters-section");
 const chaptersList = document.getElementById("chapters-list");
 const audioPlayer = document.getElementById("audio-player");
+const prevBtn = document.getElementById("prev-btn");
 const playPauseBtn = document.getElementById("play-pause-btn");
+const nextBtn = document.getElementById("next-btn");
 const speedSelect = document.getElementById("speed-select");
 const resumeBanner = document.getElementById("resume-banner");
 const resumeBtn = document.getElementById("resume-btn");
@@ -79,10 +84,8 @@ function loadSavedState() {
   }
 }
 
-function saveState(bookId, sequence, currentTime, title) {
-  const now = Date.now();
-  if (now - lastSaveTime < SAVE_THROTTLE_MS) return;
-  lastSaveTime = now;
+// Grava a posição no cache local e no servidor. É o ponto único de escrita.
+function persistPosition(bookId, sequence, currentTime, title) {
   // localStorage continua como cache local (resposta imediata ao reabrir a
   // página), mas desde a OS-028 o servidor é a fonte de verdade.
   localStorage.setItem(
@@ -90,6 +93,22 @@ function saveState(bookId, sequence, currentTime, title) {
     JSON.stringify({ bookId, sequence, currentTime, title })
   );
   saveProgressToServer(bookId, sequence, currentTime);
+}
+
+function saveState(bookId, sequence, currentTime, title) {
+  const now = Date.now();
+  if (now - lastSaveTime < SAVE_THROTTLE_MS) return;
+  lastSaveTime = now;
+  persistPosition(bookId, sequence, currentTime, title);
+}
+
+// Navegação manual (OS-039): grava a posição sem esperar o throttle, para o
+// servidor e o cache já apontarem para o trecho novo mesmo se a reprodução
+// estiver pausada no momento do clique.
+function savePositionAfterNavigation() {
+  if (currentBookId && currentSequence !== null) {
+    persistPosition(currentBookId, currentSequence, 0, currentBookTitle);
+  }
 }
 
 // Grava a posição no servidor. Falha de rede aqui é silenciosa de propósito: o
@@ -401,6 +420,8 @@ function mergeChunks(fetched) {
     const index = chunks.findIndex((chunk) => chunk.sequence === currentSequence);
     if (index >= 0) currentIndex = index;
   }
+  // Trecho seguinte pode ter acabado de ser sintetizado: destrava "Próximo".
+  updateNavButtons();
   return added.length;
 }
 
@@ -483,6 +504,45 @@ async function pollBook(bookId) {
   );
 }
 
+// "Anterior" desabilitado no primeiro trecho e "Próximo" quando o trecho seguinte
+// ainda não foi sintetizado (durante a síntese incremental, OS-021/030).
+function updateNavButtons() {
+  prevBtn.disabled = chunks.length === 0 || currentIndex <= 0;
+  nextBtn.disabled = chunks.length === 0 || currentIndex >= chunks.length - 1;
+}
+
+// Padrão de tocador de podcast: se já se passaram mais de ~3s do trecho corrente,
+// o primeiro clique reinicia o trecho atual (e um segundo clique rápido, agora com
+// menos de 3s, volta de verdade para o anterior); abaixo disso, volta um trecho.
+function goToPrevious() {
+  if (chunks.length === 0) return;
+  if (audioPlayer.currentTime > PREV_RESTART_THRESHOLD_S) {
+    playChunk(currentIndex, 0);
+    return;
+  }
+  if (currentIndex > 0) {
+    playChunk(currentIndex - 1);
+    savePositionAfterNavigation();
+  }
+}
+
+function goToNext() {
+  if (chunks.length === 0) return;
+  if (currentIndex < chunks.length - 1) {
+    playChunk(currentIndex + 1);
+    savePositionAfterNavigation();
+  }
+}
+
+function togglePlayPause() {
+  if (chunks.length === 0) return;
+  if (audioPlayer.paused) {
+    audioPlayer.play();
+  } else {
+    audioPlayer.pause();
+  }
+}
+
 function playChunk(index, startTime) {
   if (index < 0 || index >= chunks.length) return;
   currentIndex = index;
@@ -491,6 +551,7 @@ function playChunk(index, startTime) {
   // O capítulo em foco e a posição mudam a cada troca de trecho (OS-029).
   renderChapters();
   renderPositionIndicator();
+  updateNavButtons();
   audioPlayer.src = chunks[index].url;
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
 
@@ -520,6 +581,7 @@ function resetPlaybackState() {
   pendingResume = null;
   chapters = [];
   totalChunks = null;
+  updateNavButtons();
   resumeBanner.hidden = true;
   synthesisProgress.hidden = true;
   positionIndicator.hidden = true;
@@ -597,16 +659,30 @@ manualForm.addEventListener("submit", (event) => {
   openBook(bookId, null);
 });
 
-playPauseBtn.addEventListener("click", () => {
-  if (audioPlayer.paused) {
-    audioPlayer.play();
-  } else {
-    audioPlayer.pause();
-  }
-});
+prevBtn.addEventListener("click", goToPrevious);
+nextBtn.addEventListener("click", goToNext);
+playPauseBtn.addEventListener("click", togglePlayPause);
 
 speedSelect.addEventListener("change", () => {
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
+});
+
+// Atalhos de teclado (OS-039): ← anterior, → próximo, espaço play/pause.
+// Não capturar quando o foco está num campo de texto (input/select/textarea),
+// senão quebra a digitação (ex: campo "Abrir livro existente").
+document.addEventListener("keydown", (event) => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    goToPrevious();
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    goToNext();
+  } else if (event.key === " ") {
+    event.preventDefault();
+    togglePlayPause();
+  }
 });
 
 audioPlayer.addEventListener("timeupdate", () => {
