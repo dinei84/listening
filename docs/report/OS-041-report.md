@@ -32,7 +32,7 @@ Spike não toca código de produção nem contratos; os itens abaixo são aplic�
 - [x] Evidência reproduzível: script versionado em `scripts/` e números brutos colados neste relatório (seção 4) — único requisito da seção 5 da OS
 - [x] `PROJECT_STATE.md` atualizado (achado registrado em "Riscos e bloqueios" e como pendência do nível premium)
 - [x] Relatório criado em `docs/report/OS-041-report.md` (nunca dentro do arquivo da própria OS)
-- [ ] PR aberto contra o branch principal (título `[OS-041] spike comparação de TTS cloud`) — **em rascunho (draft)**, ver seção 7 (Dúvidas/bloqueios): a OS exige credenciais do dono que ainda não foram fornecidas, e o relatório deve refletir isso antes de merge
+- [ ] PR aberto contra o branch principal (título `[OS-041] spike comparação de TTS cloud`) — **aberto em draft (PR #36)**, ver seção 7 (Dúvidas/bloqueios): a OS exige credenciais do dono que ainda não foram fornecidas, e o relatório deve refletir isso antes de merge
 - [ ] Testes automatizados — N/A por definição (spike, mesmo tratamento da OS-005/OS-031); o script de medição NÃO é um teste de produção e não entra em `pytest.ini`
 
 ## 3. Amostra fixa e casos difíceis
@@ -195,4 +195,4 @@ Decisões de arquitetura **não** foram tomadas pelo agente (AGENTS.md seção 1
 
 ## 9. Link do PR
 
-Em rascunho (draft), aguardando a decisão do dono sobre credenciais. O PR foi aberto com título `[OS-041] spike comparação de TTS cloud` — deve ser mergeado como está (pesquisa + script + baseline são entregas válidas do spike) e a conclusão empírica pode vir como atualização do mesmo relatório (`OS-041-report-v2.md`), conforme a regra de versionamento do `REPORT_TEMPLATE.md`.
+**Draft:** https://github.com/dinei84/listening/pull/36 — aberto em rascunho por decisão do dono (bloqueio de credenciais, AGENTS.md seção 6). A pesquisa, o script e o baseline Kokoro são entregas válidas do spike e podem ser mergeados; a conclusão empírica (audição dos 4 provedores) pode vir como atualização do mesmo relatório (`OS-041-report-v2.md`), conforme a regra de versionamento do `REPORT_TEMPLATE.md`.
