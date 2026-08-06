@@ -7,9 +7,17 @@ from plugins.speakers.base import Speaker
 
 
 class FakeConfig:
-    def __init__(self, extractor="fake_primary", speaker="fake_speaker"):
+    def __init__(
+        self,
+        extractor="fake_primary",
+        speaker="fake_speaker",
+        max_cost_per_book=None,
+        fallback_speaker="kokoro",
+    ):
         self.extractor = extractor
         self.speaker = speaker
+        self.max_cost_per_book = max_cost_per_book
+        self.fallback_speaker = fallback_speaker
 
 
 class FakePrimaryExtractor(Extractor):

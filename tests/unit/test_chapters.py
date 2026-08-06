@@ -10,10 +10,18 @@ from plugins.extractors.base import Extractor
 
 
 class FakeConfig:
-    def __init__(self, extractor="fake_extractor", speaker="fake_speaker"):
+    def __init__(
+        self,
+        extractor="fake_extractor",
+        speaker="fake_speaker",
+        max_cost_per_book=None,
+        fallback_speaker="kokoro",
+    ):
         self.extractor = extractor
         self.speaker = speaker
         self.queue = "sqlite"
+        self.max_cost_per_book = max_cost_per_book
+        self.fallback_speaker = fallback_speaker
 
 
 class PagedExtractor(Extractor):
