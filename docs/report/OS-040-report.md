@@ -109,4 +109,4 @@ Nenhum. Duas observações, sem decisão de arquitetura deste agente: (1) o mapa
 
 ## 8. Link do PR
 
-A preencher após abertura do PR.
+https://github.com/dinei84/listening/pull/35
