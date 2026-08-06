@@ -110,8 +110,22 @@ Evidência: `docs/report/OS-005-report.md`. Nota de limitação (registrada no s
 from abc import ABC, abstractmethod
 from core.models import AudioChunk
 
+class SpeakerError(Exception):
+    """Erro de síntese de um Speaker."""
+
+class TransientSpeakerError(SpeakerError):
+    """Falha transitória (rede, timeout, 429/5xx) — retentada com backoff."""
+
+class PermanentSpeakerError(SpeakerError):
+    """Falha permanente (credencial inválida, texto rejeitado, 4xx não-429) — não retentada."""
+
 class Speaker(ABC):
     """Recebe texto e devolve áudio sintetizado."""
+
+    @property
+    def max_request_chars(self) -> int | None:
+        """Limite de caracteres por requisição do engine; None = sem limite declarado (o texto vai inteiro numa chamada)."""
+        return None
 
     @abstractmethod
     def synthesize(
@@ -129,6 +143,8 @@ class Speaker(ABC):
 `lang_code` foi adicionado na OS-025 como extensão aditiva do contrato (mesmo padrão das OS-021/022): força um idioma específico do engine, pulando a detecção automática; `None` preserva o comportamento anterior (para o `KokoroSpeaker`, detecção automática por chunk via `langdetect`, OS-020). O código é o do engine (`a`, `p`, `e`... no Kokoro), não o do `langdetect` — a tradução entre o que a API/UI expõe (`en`, `pt`, `es`...) e o código do engine fica a cargo de quem chama (`worker/tasks.py`, via `LANG_CODE_BY_LANGUAGE`).
 
 `cost_per_char` é **lido pela trava de custo (OS-042)**, não mais um gancho dormante: `core/pipeline.py::estimate_cost()` calcula `len(texto_sanitizado) × cost_per_char` do Speaker configurado, e o worker persiste a estimativa no `Book` antes de qualquer chamada de síntese. Livro com estimativa > 0 sem confirmação explícita fica em `pending_confirmation` (`POST /books/{id}/confirm` re-enfileira); estimativa acima do teto `max_cost_per_book` de `config.yaml` degrada para a voz local (`fallback_speaker`, padrão `kokoro`) mesmo confirmado — nunca roda o Speaker pago nesse caso.
+
+**OS-043 (Speaker remoto):** `max_request_chars` é a extensão aditiva do contrato que permite a um Speaker declarar seu limite de caracteres por requisição. Quem não declara (o `KokoroSpeaker`, que continua dividindo por fonemas com o G2P dele) mantém o comportamento atual — o pipeline envia o texto inteiro numa chamada. Quem declara faz o pipeline dividir o texto do chunk em pedaços que respeitam o limite (nunca cortando palavra) e concatenar os áudios num único `AudioChunk`. Falhas de síntese são classificadas pelo próprio Speaker via `TransientSpeakerError` (rede/timeout/429/5xx) vs `PermanentSpeakerError` (credencial/texto/4xx não-429): o pipeline retenta a transitória com backoff exponencial (`retry.max_attempts`/`base_delay_seconds`/`max_delay_seconds` em `config.yaml`), e a permanente sobe na hora sem gastar tentativas. Esgotado o retry, o worker marca o `Book` como `error` com mensagem explícita de que o áudio já persistido está preservado (retomável via OS-022).
 
 Regra de decisão do pipeline: usar o Speaker definido em `config.yaml` como padrão (ex: `kokoro`). Só usar um Speaker cloud quando o usuário explicitamente pedir "voz premium" para aquele livro/capítulo.
 
