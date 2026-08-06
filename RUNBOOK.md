@@ -164,6 +164,18 @@ Trocar qualquer um desses nomes exige que a classe correspondente já esteja reg
 - **`sqlite3.OperationalError: table books has no column named chunk_total`** — coluna nova adicionada na OS-024 pra barra de progresso da síntese. Igual ao que já aconteceu com `error_message` na OS-018, não existe migração de schema: um `books.db` local criado antes desta OS precisa ser apagado (ver seção 6, "Resetar tudo") pra recriar o schema com a coluna nova.
 - **`sqlite3.OperationalError: table books has no column named language`** — coluna nova adicionada na OS-025 pra seleção manual de idioma. Mesmo padrão do `chunk_total` (OS-024): sem migração de schema, apagar `books.db` (ver seção 6, "Resetar tudo") pra recriar o schema com a coluna nova.
 - **`sqlite3.OperationalError: table jobs has no column named priority`** — coluna nova adicionada na OS-032 pra preempção de fila ("Processar agora"). Mesmo padrão do `language` (OS-025): sem migração de schema, apagar `books.db` (ver seção 6, "Resetar tudo") pra recriar o schema com a coluna nova.
+- **`sqlite3.OperationalError: table books has no column named estimated_cost`** (ou `cost_confirmed`/`cost_degraded`) — três colunas novas adicionadas na OS-042 pra trava de custo (estimativa, confirmação explícita e degradação por teto). Mesmo padrão do `priority` (OS-032): sem migração de schema, apagar `books.db` (ver seção 6, "Resetar tudo") pra recriar o schema. Se você não quiser perder o áudio já sintetizado, dá pra adicionar só as colunas:
+
+  ```bash
+  python -c "
+  import sqlite3
+  conn = sqlite3.connect('books.db')
+  conn.execute('ALTER TABLE books ADD COLUMN estimated_cost REAL')
+  conn.execute('ALTER TABLE books ADD COLUMN cost_confirmed INTEGER NOT NULL DEFAULT 0')
+  conn.execute('ALTER TABLE books ADD COLUMN cost_degraded INTEGER NOT NULL DEFAULT 0')
+  conn.commit()
+  "
+  ```
 - **Livros processados antes da OS-019 têm pronúncia incorreta** — até a OS-019, `KokoroSpeaker` chamava a API errada do Kokoro (`generate_from_tokens` com texto bruto, sem rodar o G2P de verdade), gerando áudio com pronúncia errada em todo livro processado desde a OS-004 (decisão #14 em `docs/PROJECT_STATE.md`). Não há reprocessamento automático — reenviar manualmente qualquer livro que já estava `ready` antes dessa correção pra gerar o áudio de novo com a pronúncia certa.
 
 ## Referências
