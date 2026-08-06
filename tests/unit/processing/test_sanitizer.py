@@ -95,3 +95,43 @@ def test_chunk_and_clean_contracts_unchanged():
     pages = ["Linha um.\nLinha dois.", "Linha um.\nOutra coisa."]
     cleaned = clean_text(pages)
     assert "Outra coisa" in cleaned
+
+
+def test_pipeline_applies_sanitize_before_chunking(monkeypatch):
+    from core import config as config_module
+    from core import pipeline as pipeline_module
+    from core.models import AudioChunk
+    from plugins import registry as registry_module
+    from plugins.speakers.base import Speaker
+
+    class _Config:
+        extractor = "e"
+        speaker = "fake"
+        queue = "sqlite"
+
+    class _RecordingSpeaker(Speaker):
+        @property
+        def cost_per_char(self):
+            return 0.0
+
+        def synthesize(self, text, voice=None, lang_code=None):
+            self.texts = getattr(self, "texts", [])
+            self.texts.append(text)
+            return AudioChunk(
+                chapter_id="",
+                sequence=0,
+                file_path="/tmp/fake.wav",
+                duration_seconds=1.0,
+                engine_used="fake",
+            )
+
+    monkeypatch.setattr(config_module, "load_config", lambda: _Config())
+    speaker = _RecordingSpeaker()
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake": lambda: speaker})
+
+    pipeline_module.synthesize_text(
+        "O **negrito** e *italico*. Veja https://exemplo.com.",
+        chapter_id="ch1",
+    )
+
+    assert speaker.texts == ["O negrito e italico. Veja link."]

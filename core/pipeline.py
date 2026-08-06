@@ -10,6 +10,7 @@ from core.models import AudioChunk, Chapter, ExtractedPage
 from plugins import registry as registry_module
 from processing.chunker import chunk_text
 from processing.cleaner import clean_text
+from processing.sanitizer import sanitize_text
 
 # Páginas por capítulo sintético quando o PDF não traz sumário embutido (OS-027).
 # Valor arbitrário mas estável: grande o bastante para o cleaner ainda detectar
@@ -210,7 +211,8 @@ def extract_chapters(pdf_path: str) -> list[Chapter]:
 
 
 def count_text_chunks(text: str, max_chars: int | None = None) -> int:
-    """Conta em quantos chunks o texto seria dividido, sem sintetizar nada — usado para checar consistência ao retomar um Job interrompido."""
+    """Conta em quantos chunks o texto seria dividido, sem sintetizar nada — usado para checar consistência ao retomar um Job interrompido. O texto passa pela sanitização (OS-040) para o total bater com o que a síntese realmente produz."""
+    text = sanitize_text(text)
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     return len(chunks)
 
@@ -224,7 +226,8 @@ def synthesize_text(
     lang_code: str | None = None,
     sequence_offset: int = 0,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática) e sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática) e sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos. O texto passa pela sanitização (OS-040) antes de virar chunk."""
+    text = sanitize_text(text)
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     already_done = skip_sequences or set()
     # skip_sequences usa a numeração GLOBAL do livro, então o offset é aplicado
