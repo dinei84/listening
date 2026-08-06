@@ -220,9 +220,7 @@ def test_speaker_can_declare_own_size_limit(monkeypatch):
     monkeypatch.setattr(
         config_module, "load_config", lambda: FakeConfig(speaker="limited")
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"limited": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"limited": lambda: speaker})
 
     texto = " ".join(f"palavra{i}" for i in range(40))
     assert len(texto) > 100
@@ -240,7 +238,8 @@ def test_speaker_can_declare_own_size_limit(monkeypatch):
 
 def test_kokoro_speaker_output_unchanged(monkeypatch):
     """Regressão OS-034/037: o Kokoro NÃO declara limite de caracteres — a divisão por
-    fonemas continua interna ao speaker e o pipeline envia o texto inteiro de uma vez."""
+    fonemas continua interna ao speaker e o pipeline envia o texto inteiro de uma vez.
+    """
     speaker = kokoro_speaker_module.KokoroSpeaker()
     assert speaker.max_request_chars is None
 
@@ -251,7 +250,8 @@ def test_kokoro_speaker_output_unchanged(monkeypatch):
         {
             "lang_code": "p",
             "g2p": lambda self, text: ("x" * (len(text) * 2), None),
-            "__call__": lambda self, text, voice, speed: calls.append(text) or iter(
+            "__call__": lambda self, text, voice, speed: calls.append(text)
+            or iter(
                 [
                     type(
                         "R",
@@ -277,9 +277,7 @@ def test_kokoro_speaker_output_unchanged(monkeypatch):
     monkeypatch.setattr(
         config_module, "load_config", lambda: FakeConfig(speaker="kokoro")
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"kokoro": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"kokoro": lambda: speaker})
 
     texto = " ".join(f"palavra{i}" for i in range(30))
     chunks = pipeline.synthesize_text(texto, chapter_id="ch1")
@@ -306,9 +304,7 @@ def test_transient_failure_is_retried_with_backoff(monkeypatch):
     monkeypatch.setattr(registry_module, "SPEAKERS", {"flaky": lambda: speaker})
 
     sleeps = []
-    monkeypatch.setattr(
-        pipeline.time, "sleep", lambda s: sleeps.append(s)
-    )
+    monkeypatch.setattr(pipeline.time, "sleep", lambda s: sleeps.append(s))
 
     chunks = pipeline.synthesize_text("Um texto pequeno.", chapter_id="ch1")
 
@@ -326,9 +322,7 @@ def test_permanent_failure_fails_immediately(monkeypatch):
             speaker="permanent", retry_max_attempts=5, retry_base_delay_seconds=0.01
         ),
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"permanent": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"permanent": lambda: speaker})
 
     sleeps = []
     monkeypatch.setattr(pipeline.time, "sleep", lambda s: sleeps.append(s))
@@ -372,9 +366,7 @@ def test_retry_exhausted_keeps_persisted_chunks(temp_paths, monkeypatch):
     monkeypatch.setattr(
         registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"always": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"always": lambda: speaker})
     queue = sqlite_queue_module.SQLiteJobQueue()
     job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
     queue.enqueue(job)
@@ -397,9 +389,7 @@ def test_retry_count_is_configurable(monkeypatch):
         "load_config",
         lambda: FakeConfig(speaker="always", retry_max_attempts=2),
     )
-    monkeypatch.setattr(
-        registry_module, "SPEAKERS", {"always": lambda: speaker}
-    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"always": lambda: speaker})
     monkeypatch.setattr(pipeline.time, "sleep", lambda s: None)
 
     with pytest.raises(TransientSpeakerError):

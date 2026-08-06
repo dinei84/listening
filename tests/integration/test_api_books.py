@@ -27,12 +27,18 @@ class FakeConfig:
         queue="sqlite",
         max_cost_per_book=None,
         fallback_speaker="kokoro",
+        retry_max_attempts=3,
+        retry_base_delay_seconds=1.0,
+        retry_max_delay_seconds=30.0,
     ):
         self.extractor = extractor
         self.speaker = speaker
         self.queue = queue
         self.max_cost_per_book = max_cost_per_book
         self.fallback_speaker = fallback_speaker
+        self.retry_max_attempts = retry_max_attempts
+        self.retry_base_delay_seconds = retry_base_delay_seconds
+        self.retry_max_delay_seconds = retry_max_delay_seconds
 
 
 class FakeExtractor(Extractor):

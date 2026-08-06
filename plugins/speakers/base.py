@@ -3,6 +3,18 @@ from abc import ABC, abstractmethod
 from core.models import AudioChunk
 
 
+class SpeakerError(Exception):
+    """Erro de síntese lançado por um Speaker."""
+
+
+class TransientSpeakerError(SpeakerError):
+    """Falha transitória (rede, timeout, 429/5xx) — pode ser retentada com backoff."""
+
+
+class PermanentSpeakerError(SpeakerError):
+    """Falha permanente (credencial inválida, texto rejeitado, 4xx não-429) — não adianta retentar."""
+
+
 class Speaker(ABC):
     """Classe base abstrata para engines de texto-para-fala (TTS)."""
 
@@ -11,6 +23,11 @@ class Speaker(ABC):
     def cost_per_char(self) -> float:
         """Custo por caractere. 0.0 para engines locais."""
         ...
+
+    @property
+    def max_request_chars(self) -> int | None:
+        """Limite de caracteres por requisição do engine; None = sem limite declarado (o texto vai inteiro numa chamada)."""
+        return None
 
     @abstractmethod
     def synthesize(
