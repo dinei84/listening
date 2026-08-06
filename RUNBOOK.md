@@ -163,6 +163,25 @@ export LLM_API_KEY='sua-chave'
 
 Mesmo com isso configurado, a normalização só acontece nos livros que **optarem** por ela no upload (`-F "normalize_text=true"`). Livro sem opt-in não constrói o normalizador nem faz chamada nenhuma.
 
+**Onde a variável de ambiente precisa existir:** quem chama a LLM é o **worker**, não a API. Então o `export LLM_API_KEY` tem de estar **no terminal onde o worker roda** — exportar só no terminal da validação não basta. Se o worker não enxergar a chave, a normalização degrada em silêncio para "sem normalização" (por design, para não derrubar o livro) e você não vê diferença nenhuma no áudio.
+
+Roteiro completo para testar o nível médio:
+
+```bash
+# Terminal 1 — API (não precisa da chave)
+source venv/bin/activate
+uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+```bash
+# Terminal 2 — Worker (PRECISA da chave)
+source venv/bin/activate
+export LLM_API_KEY='sua-chave'
+python -m worker.tasks
+```
+
+No player, marque **"Melhorar texto com IA"** ao enviar o PDF. Sem marcar, nada muda — nem chamada, nem custo.
+
 **Antes de confiar no provedor, valide:**
 
 ```bash

@@ -223,6 +223,11 @@ async function uploadBook(file) {
   if (language) {
     formData.append("language", language);
   }
+  // Opt-in do nível médio (OS-038): só é enviado quando marcado, para que o
+  // caminho padrão continue sem normalização, sem rede e sem custo.
+  if (document.getElementById("normalize-checkbox").checked) {
+    formData.append("normalize_text", "true");
+  }
   const response = await fetch("/books", { method: "POST", body: formData });
   if (!response.ok) {
     throw new Error("Falha no upload");

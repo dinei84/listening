@@ -97,3 +97,17 @@ def test_player_js_wires_trecho_navigation_and_keyboard(tmp_path, monkeypatch):
     assert 'getElementById("next-btn")' in js
     assert "ArrowLeft" in js
     assert "ArrowRight" in js
+
+
+def test_player_upload_form_has_normalize_checkbox(tmp_path, monkeypatch):
+    """OS-038: o opt-in do nível médio precisa estar na tela, não só via curl."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        html = client.get("/").text
+        js = client.get("/app.js").text
+
+    assert 'id="normalize-checkbox"' in html
+    assert "normalize_text" in js

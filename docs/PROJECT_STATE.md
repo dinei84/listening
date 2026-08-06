@@ -12,13 +12,13 @@ App pessoal que converte PDF em audiobook (estilo Audible), com pipeline plugáv
 
 ## 2. Status atual
 
-**Fase:** qualidade de áudio, navegação e limpeza de texto consolidadas (OS-034 a OS-040), validadas em uso real pelo dono do projeto: "ficou muito melhor, agora temos muito mais fluência na leitura". O truncamento silencioso em pt/es/fr/hi/it acabou (OS-034), as quebras de linha do PDF deixaram de virar pausas no meio da frase (OS-035), a detecção de capítulos passou a produzir estrutura navegável de verdade (OS-036: 4 → 35 capítulos no livro de teste), existe um dicionário fonético local para termos que o G2P erra (OS-037), o player navega por trecho (OS-039) e o texto é sanitizado antes de virar áudio (OS-040: `**negrito**` deixa de ser "asterisco asterisco", `≠` deixa de ser lido "not equal to" em inglês, tabelas/URLs/código param de virar sopa de caracteres). **Trava de custo implementada (OS-042):** `estimate_cost()` em `core/pipeline.py` lê `cost_per_char` (gancho dormante desde a OS-004 agora ligado), a estimativa é persistida no `Book` antes de qualquer síntese, livro pago sem confirmação fica em `pending_confirmation` (`POST /books/{id}/confirm` re-enfileira) e estimativa acima do teto `max_cost_per_book` degrada para a voz local — nunca roda o Speaker pago nesse caso. **Pipeline preparado para Speaker remoto (OS-043):** o contrato `Speaker` ganhou `max_request_chars` (limite de caracteres por requisição, aditivo — quem não declara mantém comportamento) e as exceções `TransientSpeakerError`/`PermanentSpeakerError`; o pipeline divide por esse limite (nunca cortando palavra) e retenta falha transitória com backoff exponencial configurável (`retry.*` em `config.yaml`), falha permanente sobe na hora; esgotado o retry, o `Book` vai para `error` com mensagem explícita de que o áudio já persistido está preservado (retomável via OS-022). **Direção nova: o MVP passa a ser desenhado como produto em três níveis (decisão #23).**
+**Fase:** os três níveis do produto (decisão #23) estão implementados **na arquitetura**. **Simples** (padrão de hoje): extração local + Kokoro, custo zero, nenhuma rede — `config.yaml` com `speaker: kokoro` e `normalizer: noop`. **Médio** (OS-038): `TextNormalizer` com LLM via endpoint compatível com OpenAI, opt-in por livro, ~US$ 0,16–0,87/livro. **Premium**: terreno pronto (OS-042 trava de custo, OS-043 limite por engine + retry), mas **falta escolher o motor de TTS** — bloqueado na OS-041 por credencial. **O que NÃO existe ainda é a camada de produto**: não há conceito de usuário, conta ou plano; o nível é escolhido por `config.yaml` (global) + flag por livro.
 
-**Última OS concluída:** OS-043 — preparar o pipeline para `Speaker` remoto (limite por engine + retry com backoff).
+**Última OS concluída:** OS-038 — ajudante LLM (nível médio), com o opt-in na tela do player.
 
 **OS em andamento:** nenhuma.
 
-**Próxima OS a abrir:** o **nível médio** (OS-038) está implementado e só depende de o dono validar o provedor com a chave real. O **premium** continua bloqueado na OS-041 (PR #36, em draft): falta credencial de TTS para ouvir as vozes e escolher o motor. Depois da escolha, falta escrever a OS de implementação do `Speaker` cloud — que será pequena, porque o terreno (limite por engine e retry, OS-043; trava de custo, OS-042) já está em `main`.
+**Próxima OS a abrir:** **camada de produto / multitenancy** (ver seção 8, ainda a redigir como OS) — é o próximo passo declarado pelo dono. Em paralelo, o premium segue bloqueado na OS-041 (credencial de TTS).
 
 **Achados de teste real (sessão de 2026-08-05, investigados e confirmados) — todos endereçados pela OS-033, exceto onde indicado:** (a) `DELETE /books/{id}` bloqueia (409) livros em `uploaded`, que estão só enfileirados sem nada sendo escrito — a justificativa da decisão #17 não se aplica a esse status, e na prática nenhum livro era deletável enquanto um livro grande sintetizava; agravado pelo player descartar o motivo do erro (`player/app.js` troca o `detail` da API por "Falha ao deletar o livro"). Resolvido pela OS-033 (decisão #22): `uploaded` saiu de `_BLOCKED_DELETE_STATUSES` e o player passou a mostrar o `detail` real. (b) Clicar num livro da lista não preenche o campo "Abrir livro existente" (`player/app.js` chama `openBook()` sem setar `bookIdInput.value`) — nunca preencheu, não é regressão; resolvido pela OS-033 (seção 2.2). (c) Livro `queued` aparece na UI como `uploaded` cru, sem dizer que está esperando outro livro terminar — foi o que fez parecer que o sistema estava travado. Resolvido pela OS-033 (`statusLabel` → "Na fila — aguardando processamento").
 
@@ -162,3 +162,28 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 - Atualizar a seção 2 (status atual) e 4 (componentes) a cada OS concluída.
 - Mover item do backlog (seção 5) para "implementado" só depois que o DoD da OS foi cumprido, não quando o código foi só escrito.
 - Nunca editar o log de decisões (seção 3) retroativamente — só adicionar.
+
+## 8. Direção de produto: multitenancy e camada de contas (a redigir como OS)
+
+Registrado em 2026-08-06, a partir da conversa com o dono do projeto. **Nada disso está implementado** — é a intenção declarada para a próxima fase, guardada aqui porque o contexto da conversa se perde entre sessões.
+
+**Motivação:** hoje a aplicação é single-user. Os três níveis existem na arquitetura (plugins + flags), mas não há usuário, conta nem plano — o nível é definido por `config.yaml` (global, exige editar arquivo e reiniciar o worker) mais uma flag por livro. Para virar produto vendável isso precisa de uma camada acima.
+
+**Intenção do dono, em palavras dele (a deliberar, não decidido):**
+
+- **Domínio separado para um usuário master**, com controle dos usuários da aplicação (painel administrativo).
+- **Aplicação multitenant**, com o máximo de isolamento razoável.
+- Abordagem considerada: **Shared Database + RLS** (row-level security).
+- **JWT com claim de tenant** para autenticação.
+- **Resolução do tenant em middleware**, verificando logo na entrada da requisição.
+- **Verificação de pertencimento** (o recurso pedido é mesmo daquele tenant).
+- **Isolamento de arquivos** — hoje `uploads/` e `storage/audio/{book_id}/` são globais e sem qualquer noção de dono.
+- **Blacklist de JWT** para revogação.
+
+**Consequências técnicas já visíveis, para quem for redigir a OS:**
+
+1. **Banco.** RLS não existe no SQLite. Essa direção implica reabrir a decisão #4 (SQLite → Postgres), que sempre esteve marcada como "migração futura" e nunca foi decidida.
+2. **Armazenamento de arquivos.** `uploads/` e `storage/audio/` não têm dono hoje; qualquer isolamento real precisa de caminho por tenant e de verificação no endpoint que serve o áudio.
+3. **Plano vs. flag por livro.** Hoje `normalize_text` é por livro. Com plano por conta, é preciso decidir se o plano **restringe** o que o livro pode pedir (provável) e onde essa checagem mora.
+4. **`config.yaml` é global.** Com múltiplos tenants em planos diferentes, a escolha de `speaker`/`normalizer` não pode mais ser um arquivo único — vira atributo do plano/tenant.
+5. **Chaves de API.** Hoje há uma chave por instalação, em variável de ambiente. Com multitenancy é preciso decidir se o custo é do provedor (uma chave, rateio por uso) ou de cada cliente (chave por tenant).
