@@ -67,3 +67,33 @@ def test_player_js_consumes_chapters_and_progress_endpoints(tmp_path, monkeypatc
 
     assert "/chapters" in js
     assert "/progress" in js
+
+
+def test_player_has_prev_and_next_buttons(tmp_path, monkeypatch):
+    """OS-039: controles de trecho anterior/próximo presentes na seção de controles."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        html = client.get("/").text
+
+    assert 'id="prev-btn"' in html
+    assert 'id="next-btn"' in html
+    assert "Anterior" in html
+    assert "Próximo" in html
+
+
+def test_player_js_wires_trecho_navigation_and_keyboard(tmp_path, monkeypatch):
+    """OS-039: app.js liga os botões e os atalhos de teclado (setas + espaço)."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        js = client.get("/app.js").text
+
+    assert 'getElementById("prev-btn")' in js
+    assert 'getElementById("next-btn")' in js
+    assert "ArrowLeft" in js
+    assert "ArrowRight" in js
