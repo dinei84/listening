@@ -26,7 +26,8 @@ def init_db(db_path: str | None = None) -> None:
                 language TEXT,
                 estimated_cost REAL,
                 cost_confirmed INTEGER NOT NULL DEFAULT 0,
-                cost_degraded INTEGER NOT NULL DEFAULT 0
+                cost_degraded INTEGER NOT NULL DEFAULT 0,
+                normalize_text INTEGER NOT NULL DEFAULT 0
             )
             """)
         # `order` é palavra reservada no SQL, daí a coluna se chamar chapter_order.
@@ -54,8 +55,8 @@ def create_book(book: Book, db_path: str | None = None) -> None:
     try:
         conn.execute(
             "INSERT INTO books "
-            "(id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded, normalize_text) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 book.id,
                 book.title,
@@ -68,6 +69,7 @@ def create_book(book: Book, db_path: str | None = None) -> None:
                 book.estimated_cost,
                 int(book.cost_confirmed),
                 int(book.cost_degraded),
+                int(book.normalize_text),
             ),
         )
         conn.commit()
@@ -80,7 +82,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -102,6 +104,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         estimated_cost=row[8],
         cost_confirmed=bool(row[9]),
         cost_degraded=bool(row[10]),
+        normalize_text=bool(row[11]),
     )
 
 
@@ -110,7 +113,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -129,6 +132,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
             estimated_cost=row[8],
             cost_confirmed=bool(row[9]),
             cost_degraded=bool(row[10]),
+            normalize_text=bool(row[11]),
         )
         for row in rows
     ]

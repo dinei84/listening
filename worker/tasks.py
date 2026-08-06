@@ -36,7 +36,10 @@ def process_job(job: Job) -> None:
         # OS-042: a estimativa acontece ANTES de qualquer chamada ao Speaker. A
         # extração já rodou acima, então o texto real está disponível aqui. O custo
         # do Kokoro (cost_per_char == 0.0) dá zero e segue o fluxo antigo sem fricção.
-        estimate = sum(pipeline.estimate_cost(chapter.text) for chapter in chapters)
+        estimate = sum(
+            pipeline.estimate_cost(chapter.text, normalize=book.normalize_text)
+            for chapter in chapters
+        )
         db.set_book_estimated_cost(job.book_id, estimate)
 
         cap = cfg.max_cost_per_book
@@ -115,6 +118,7 @@ def process_job(job: Job) -> None:
                 lang_code=lang_code,
                 sequence_offset=offset,
                 speaker_name=cfg.fallback_speaker if degraded else None,
+                normalize=book.normalize_text,
             )
             offset += chapter_chunks
         db.update_book_status(job.book_id, "ready")

@@ -54,6 +54,8 @@ class Book(BaseModel):
     estimated_cost: float | None = None
     cost_confirmed: bool = False
     cost_degraded: bool = False
+    # Opt-in do nível médio (OS-038): normalizar o texto com LLM antes da síntese.
+    normalize_text: bool = False
 
 
 class ReadingProgress(BaseModel):

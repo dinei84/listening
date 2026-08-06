@@ -27,6 +27,8 @@ class FakeConfig:
         self.normalizer_base_url = "https://exemplo.invalido/v1"
         self.normalizer_model = "modelo-teste"
         self.normalizer_api_key_env = "TEST_LLM_KEY"
+        self.normalizer_cost_per_char = 0.0
+        self.normalizer_divergence_ratio = None
         self.__dict__.update(kwargs)
 
 
@@ -117,9 +119,14 @@ def test_optin_book_has_text_normalized_before_synthesis(monkeypatch, speaker):
         def normalize(self, text):
             return text.upper()
 
-    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    # O livro opta por normalizar; a config diz QUAL normalizador é usado.
     monkeypatch.setattr(
-        registry_module, "NORMALIZERS", {"noop": NoOpNormalizer, "llm": UpperNormalizer}
+        config_module, "load_config", lambda: FakeConfig(normalizer="llm")
+    )
+    monkeypatch.setattr(
+        registry_module,
+        "NORMALIZERS",
+        {"noop": NoOpNormalizer, "llm": lambda **kw: UpperNormalizer()},
     )
 
     pipeline.synthesize_text("frase original.", chapter_id="c1", normalize=True)
@@ -253,3 +260,61 @@ def test_missing_api_key_degrades_to_noop(monkeypatch):
 
     original = "Texto que precisa passar intacto."
     assert normalizer.normalize(original) == original
+
+
+# --- integração com a trava de custo (OS-042) ------------------------------------
+
+
+def test_cost_estimate_includes_normalizer_when_optin(monkeypatch):
+    """Sem isso o nível médio escaparia da trava de custo da OS-042."""
+
+    class PaidSpeaker(Speaker):
+        @property
+        def cost_per_char(self):
+            return 0.0
+
+        def synthesize(self, text, voice=None, lang_code=None):
+            raise AssertionError("não deveria sintetizar ao estimar")
+
+    monkeypatch.setattr(
+        config_module,
+        "load_config",
+        lambda: FakeConfig(normalizer="llm", normalizer_cost_per_char=0.002),
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": PaidSpeaker})
+    monkeypatch.setattr(
+        registry_module,
+        "NORMALIZERS",
+        {
+            "noop": NoOpNormalizer,
+            "llm": lambda **kw: LLMNormalizer(
+                base_url="x", model="m", api_key="k", cost_per_char=kw["cost_per_char"]
+            ),
+        },
+    )
+
+    texto = "abcde"
+    sem_norm = pipeline.estimate_cost(texto)
+    com_norm = pipeline.estimate_cost(texto, normalize=True)
+
+    assert sem_norm == 0.0
+    assert com_norm == pytest.approx(len(texto) * 0.002)
+
+
+def test_cost_estimate_without_optin_ignores_normalizer_cost(monkeypatch):
+    class FreeSpeaker(Speaker):
+        @property
+        def cost_per_char(self):
+            return 0.0
+
+        def synthesize(self, text, voice=None, lang_code=None):
+            raise AssertionError("não deveria sintetizar ao estimar")
+
+    monkeypatch.setattr(
+        config_module,
+        "load_config",
+        lambda: FakeConfig(normalizer="llm", normalizer_cost_per_char=0.002),
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": FreeSpeaker})
+
+    assert pipeline.estimate_cost("abcde") == 0.0
