@@ -135,3 +135,34 @@ def test_pipeline_applies_sanitize_before_chunking(monkeypatch):
     )
 
     assert speaker.texts == ["O negrito e italico. Veja link."]
+
+
+# --- Correções de revisão (defeitos encontrados na revisão da OS-040) -----------
+
+
+def test_sanitize_reads_brazilian_currency_as_reais_after_the_number():
+    """R$ é real, não dólar — e em português a moeda vem DEPOIS do número."""
+    assert sanitize_text("Custou R$ 50 no total.") == "Custou 50 reais no total."
+    assert sanitize_text("Preco: R$ 1.200,00.") == "Preco: 1.200,00 reais."
+
+
+def test_sanitize_reads_other_currencies_after_the_number():
+    assert sanitize_text("Custou $ 50.") == "Custou 50 dólares."
+    assert sanitize_text("Custou € 30.") == "Custou 30 euros."
+    assert sanitize_text("Custou £ 20.") == "Custou 20 libras."
+
+
+def test_sanitize_keeps_sentence_starting_with_a_number():
+    """Número no início de frase não é item de lista — não pode ser comido."""
+    assert sanitize_text("42. Esse e o numero da resposta.") == (
+        "42. Esse e o numero da resposta."
+    )
+    assert sanitize_text("800. Carlos Magno foi coroado.") == (
+        "800. Carlos Magno foi coroado."
+    )
+
+
+def test_sanitize_still_strips_real_numbered_list():
+    """Lista numerada de verdade (itens consecutivos) continua sendo limpa."""
+    texto = "1. Primeiro item\n2. Segundo item\n3. Terceiro item"
+    assert sanitize_text(texto) == "Primeiro item\nSegundo item\nTerceiro item"
