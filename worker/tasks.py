@@ -5,6 +5,7 @@ from core import config as config_module
 from core import pipeline
 from core.models import AudioChunk, Job
 from plugins import registry as registry_module
+from plugins.speakers.base import TransientSpeakerError
 from plugins.speakers.kokoro_speaker import LANG_CODE_BY_LANGUAGE
 from storage import audio_store, db, uploads
 
@@ -129,6 +130,17 @@ def process_job(job: Job) -> None:
         )
         db.update_book_status(job.book_id, "paused")
         queue.requeue(job.id)
+    except TransientSpeakerError as exc:
+        # OS-043: retry esgotado numa falha transitória (rede/timeout/429/5xx).
+        # Não é bug do pipeline — merece atenção humana, mas o áudio já gerado e
+        # persistido está preservado: reprocessar o livro retoma de onde parou (OS-022).
+        message = (
+            f"{exc} — falha de rede persistente após {cfg.retry_max_attempts} tentativas. "
+            "O áudio já sintetizado e persistido está preservado; reprocesse o livro "
+            "para retomar do ponto em que parou."
+        )
+        db.update_book_status(job.book_id, "error", error_message=message)
+        queue.mark_failed(job.id, message)
     # Captura ampla intencional: mesmo motivo da OS-010 (rota /books) — qualquer
     # falha do pipeline vira Book "error" + Job "failed", nunca derruba o worker.
     except Exception as exc:  # noqa: BLE001

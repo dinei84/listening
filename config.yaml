@@ -6,3 +6,11 @@ queue: sqlite
 # degrada para a voz local (fallback_speaker) com aviso ao usuário.
 # null = sem teto (qualquer estimativa segue o fluxo normal de confirmação).
 max_cost_per_book: null
+
+# Retry de falha transitória na síntese (OS-043): nº total de tentativas e backoff
+# exponencial (o delay dobra a cada tentativa, até max_delay_seconds). Falha
+# permanente (credencial inválida, texto rejeitado) nunca é retentada.
+retry:
+  max_attempts: 3
+  base_delay_seconds: 1.0
+  max_delay_seconds: 30.0

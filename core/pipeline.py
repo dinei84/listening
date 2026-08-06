@@ -1,13 +1,19 @@
+import os
 import re
+import tempfile
+import time
 import uuid
 from collections.abc import Callable
 from itertools import pairwise
 
 import fitz
+import numpy as np
+import soundfile as sf
 
 from core import config as config_module
 from core.models import AudioChunk, Chapter, ExtractedPage
 from plugins import registry as registry_module
+from plugins.speakers.base import TransientSpeakerError
 from processing.chunker import chunk_text
 from processing.cleaner import clean_text
 from processing.sanitizer import sanitize_text
@@ -225,6 +231,64 @@ def estimate_cost(text: str) -> float:
     return len(text) * speaker.cost_per_char
 
 
+def _split_by_char_limit(text: str, limit: int | None) -> list[str]:
+    """Divide o texto em pedaços que não excedam `limit` caracteres, sem nunca cortar uma palavra ao meio; limit None devolve o texto inteiro num pedaço só."""
+    if limit is None or len(text) <= limit:
+        return [text]
+    if not re.search(r"\s", text):
+        return [text]
+    words = text.split()
+    pieces: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if len(candidate) <= limit:
+            current = candidate
+        else:
+            if current:
+                pieces.append(current)
+            current = word
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def _merge_wav_files(paths: list[str]) -> tuple[str, float]:
+    """Concatena arquivos .wav PCM16 no mesmo sample rate num único arquivo e devolve (caminho, duração em segundos)."""
+    sample_rate = None
+    parts: list[np.ndarray] = []
+    for path in paths:
+        data, sr = sf.read(path, dtype="float32")
+        if sample_rate is None:
+            sample_rate = sr
+        parts.append(data)
+    combined = np.concatenate(parts)
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    sf.write(path, combined, sample_rate or 24000)
+    return path, len(combined) / (sample_rate or 24000)
+
+
+def _synthesize_with_retry(
+    speaker,
+    text: str,
+    lang_code: str | None,
+    max_attempts: int,
+    base_delay: float,
+    max_delay: float,
+) -> AudioChunk:
+    """Chama speaker.synthesize repetindo falha transitória com backoff exponencial (base × 2^(n-1), teto em max_delay); falha permanente não é retentada e sobe de imediato."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return speaker.synthesize(text, lang_code=lang_code)
+        except TransientSpeakerError:
+            if attempt >= max_attempts:
+                raise
+            delay = min(base_delay * (2 ** (attempt - 1)), max_delay)
+            time.sleep(delay)
+    raise RuntimeError("unreachable")
+
+
 def synthesize_text(
     text: str,
     chapter_id: str,
@@ -235,7 +299,7 @@ def synthesize_text(
     sequence_offset: int = 0,
     speaker_name: str | None = None,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos e speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local). O texto passa pela sanitização (OS-040) antes de virar chunk."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos e speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local). Falhas transitórias (TransientSpeakerError) são retentadas com backoff conforme a config retry (OS-043). O texto passa pela sanitização (OS-040) antes de virar chunk."""
     text = sanitize_text(text)
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     already_done = skip_sequences or set()
@@ -251,10 +315,33 @@ def synthesize_text(
 
     cfg = config_module.load_config()
     speaker = registry_module.SPEAKERS[speaker_name or cfg.speaker]()
+    # OS-043: se o Speaker declarar limite de caracteres por requisição, o texto do
+    # chunk é dividido em pedaços que respeitam o limite (nunca cortando palavra) e
+    # os áudios são concatenados num único AudioChunk — mesma granularidade de sempre.
+    char_limit = getattr(speaker, "max_request_chars", None)
 
     audio_chunks: list[AudioChunk] = []
     for sequence, piece in pending:
-        audio_chunk = speaker.synthesize(piece, lang_code=lang_code).model_copy(
+        pieces = _split_by_char_limit(piece, char_limit)
+        sub_chunks = [
+            _synthesize_with_retry(
+                speaker,
+                sub,
+                lang_code,
+                cfg.retry_max_attempts,
+                cfg.retry_base_delay_seconds,
+                cfg.retry_max_delay_seconds,
+            )
+            for sub in pieces
+        ]
+        if len(sub_chunks) == 1:
+            audio_chunk = sub_chunks[0]
+        else:
+            merged_path, duration = _merge_wav_files([c.file_path for c in sub_chunks])
+            audio_chunk = sub_chunks[0].model_copy(
+                update={"file_path": merged_path, "duration_seconds": duration}
+            )
+        audio_chunk = audio_chunk.model_copy(
             update={"chapter_id": chapter_id, "sequence": sequence}
         )
         audio_chunks.append(audio_chunk)

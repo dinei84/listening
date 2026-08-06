@@ -108,6 +108,9 @@ def test_pipeline_applies_sanitize_before_chunking(monkeypatch):
         extractor = "e"
         speaker = "fake"
         queue = "sqlite"
+        retry_max_attempts = 3
+        retry_base_delay_seconds = 1.0
+        retry_max_delay_seconds = 30.0
 
     class _RecordingSpeaker(Speaker):
         @property
