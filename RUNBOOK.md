@@ -142,6 +142,58 @@ Se a fonemização não melhorar, **não adicione** — uma "correção" pior qu
 
 O mapa é lido uma vez por processo. Arquivo ausente ou malformado degrada para "sem substituição" — nunca derruba a síntese; reinicie o worker depois de editar.
 
+## 6.2 Normalização por LLM (nível médio)
+
+Desligada por padrão — o nível simples não toca a rede e não custa nada. Para ligar, edite `config.yaml`:
+
+```yaml
+normalizer:
+  name: llm
+  base_url: https://api.deepseek.com/v1   # qualquer endpoint compatível com OpenAI
+  model: deepseek-chat
+  api_key_env: LLM_API_KEY
+  cost_per_char: 0.0000012                # entra na trava de custo da OS-042
+```
+
+A chave **nunca** vai no arquivo — só o nome da variável de ambiente:
+
+```bash
+export LLM_API_KEY='sua-chave'
+```
+
+Mesmo com isso configurado, a normalização só acontece nos livros que **optarem** por ela no upload (`-F "normalize_text=true"`). Livro sem opt-in não constrói o normalizador nem faz chamada nenhuma.
+
+**Onde a variável de ambiente precisa existir:** quem chama a LLM é o **worker**, não a API. Então o `export LLM_API_KEY` tem de estar **no terminal onde o worker roda** — exportar só no terminal da validação não basta. Se o worker não enxergar a chave, a normalização degrada em silêncio para "sem normalização" (por design, para não derrubar o livro) e você não vê diferença nenhuma no áudio.
+
+Roteiro completo para testar o nível médio:
+
+```bash
+# Terminal 1 — API (não precisa da chave)
+source venv/bin/activate
+uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+
+```bash
+# Terminal 2 — Worker (PRECISA da chave)
+source venv/bin/activate
+export LLM_API_KEY='sua-chave'
+python -m worker.tasks
+```
+
+No player, marque **"Melhorar texto com IA"** ao enviar o PDF. Sem marcar, nada muda — nem chamada, nem custo.
+
+**Antes de confiar no provedor, valide:**
+
+```bash
+export LLM_API_KEY='sua-chave'
+venv/bin/python scripts/validate_normalizer.py \
+    --base-url https://api.deepseek.com/v1 --model deepseek-chat
+```
+
+O script roda casos difíceis reais (moeda, abreviação, número, sigla, prosa longa) e mostra o antes/depois. Confira três coisas: `R$ 50` virou "cinquenta reais" (não "dólares"), nada de conteúdo sumiu, e a saída não veio com "Aqui está o texto formatado:" junto. Se o guarda-corpo descartar muita coisa, o modelo não serve para esse uso.
+
+**O guarda-corpo, para você saber o que esperar:** a saída da LLM é descartada em favor do texto original quando encolhe demais (sinal de resumo), cresce demais (sinal de invenção), ou começa com preâmbulo de conversa. A janela é assimétrica de propósito — normalizar expande legitimamente ("R$ 50" → "cinquenta reais"), mas encolher é sempre suspeito.
+
 ## 7. Configuração
 
 `config.yaml` na raiz define qual plugin usar em cada categoria:
@@ -173,6 +225,16 @@ Trocar qualquer um desses nomes exige que a classe correspondente já esteja reg
   conn.execute('ALTER TABLE books ADD COLUMN estimated_cost REAL')
   conn.execute('ALTER TABLE books ADD COLUMN cost_confirmed INTEGER NOT NULL DEFAULT 0')
   conn.execute('ALTER TABLE books ADD COLUMN cost_degraded INTEGER NOT NULL DEFAULT 0')
+  conn.commit()
+  "
+  ```
+- **`sqlite3.OperationalError: table books has no column named normalize_text`** — coluna nova da OS-038 (opt-in do nível médio). Mesmo padrão dos anteriores:
+
+  ```bash
+  python -c "
+  import sqlite3
+  conn = sqlite3.connect('books.db')
+  conn.execute('ALTER TABLE books ADD COLUMN normalize_text INTEGER NOT NULL DEFAULT 0')
   conn.commit()
   "
   ```

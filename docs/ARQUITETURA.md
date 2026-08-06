@@ -229,7 +229,34 @@ Regra de decisão: `worker/tasks.py` só conhece `JobQueue` pela interface, reso
 
 `prioritize()`, `should_yield()`, `requeue()` e `get_job_for_book()` foram adicionados na OS-032 (preempção de fila, "Processar agora"), mesma extensão aditiva. `claim_next()` ordena por `priority DESC, rowid` — sem prioridade definida (tudo `0`), o comportamento é idêntico ao FIFO original. A preempção é **cooperativa** (decisão #21): o worker pergunta `should_yield(job_id)` entre um chunk e outro e, se `True`, devolve o próprio `Job` para `queued` via `requeue()` (preservando a prioridade) e marca o `Book` como `paused` — nada é apagado, a retomada continua de onde parou via `skip_sequences` da OS-022. `get_job_for_book()` é usado pelo `POST /books/{id}/prioritize` para localizar o `Job` de um livro.
 
-### 4.4 Registro de plugins
+### 4.4 TextNormalizer (normalização de texto — OS-038)
+
+Ajusta o texto antes da síntese: números e abreviações por extenso, pontuação para respiro. É plugin pela regra de ouro da seção 1 — "se envolve custo variável (API paga), é plugin". Corresponde ao **nível médio** do produto (decisão #23).
+
+```python
+# plugins/normalizers/base.py
+from abc import ABC, abstractmethod
+
+class TextNormalizer(ABC):
+    """Ajusta o texto antes da síntese."""
+
+    @abstractmethod
+    def normalize(self, text: str) -> str:
+        """Nunca deve levantar: em qualquer falha, devolver o texto original."""
+        ...
+
+    @property
+    @abstractmethod
+    def cost_per_char(self) -> float:
+        """Custo por caractere de entrada. 0.0 para implementações locais."""
+        ...
+```
+
+Regra de decisão: `NoOpNormalizer` é o padrão e **não toca a rede** — o nível simples não paga nada, nem em latência. A normalização só acontece com **opt-in por livro** (`Book.normalize_text`), e o `LLMNormalizer` mira o formato **compatível com OpenAI**, com `base_url`/`model` em `config.yaml` e a chave sempre em variável de ambiente. Trocar de provedor é mudar config, não código.
+
+**O contrato exige que `normalize()` nunca levante.** Normalização é melhoria opcional: rede fora, credencial ausente ou resposta malformada devolvem o texto original, nunca derrubam o livro. Além disso a implementação de LLM aplica um guarda-corpo contra alteração de conteúdo — janela assimétrica de tamanho (expandir é legítimo, encolher é sinal de resumo) e detecção de preâmbulo conversacional.
+
+### 4.5 Registro de plugins
 
 ```python
 # plugins/registry.py
@@ -244,6 +271,11 @@ SPEAKERS = {
     "kokoro": KokoroSpeaker,
     "piper": PiperSpeaker,
     "cloud_tts": CloudSpeaker,
+}
+
+NORMALIZERS = {
+    "noop": NoOpNormalizer,   # padrão: nível simples, sem rede
+    "llm": LLMNormalizer,    # nível médio, endpoint compatível com OpenAI
 }
 
 QUEUES = {

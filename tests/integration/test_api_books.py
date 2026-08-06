@@ -811,9 +811,7 @@ def fake_paid_pipeline(monkeypatch):
     )
 
 
-def test_status_exposes_cost_estimate_fields(
-    temp_paths, fake_paid_pipeline
-):
+def test_status_exposes_cost_estimate_fields(temp_paths, fake_paid_pipeline):
     with TestClient(app) as client:
         book_id = client.post("/books", files=_upload_files()).json()["id"]
 
@@ -826,9 +824,7 @@ def test_status_exposes_cost_estimate_fields(
     assert "cost_degraded" in body
 
 
-def test_paid_book_waits_for_confirmation_after_worker(
-    temp_paths, fake_paid_pipeline
-):
+def test_paid_book_waits_for_confirmation_after_worker(temp_paths, fake_paid_pipeline):
     """Livro pago: o worker extrai, estima e para aguardando confirmação — sem áudio."""
     with TestClient(app) as client:
         book_id = client.post("/books", files=_upload_files()).json()["id"]
@@ -838,16 +834,12 @@ def test_paid_book_waits_for_confirmation_after_worker(
         body = client.get(f"/books/{book_id}/status").json()
 
     assert body["status"] == "pending_confirmation"
-    assert body["estimated_cost"] == pytest.approx(
-        len("Some extracted text.") * 0.001
-    )
+    assert body["estimated_cost"] == pytest.approx(len("Some extracted text.") * 0.001)
     assert body["cost_confirmed"] is False
     assert client.get(f"/books/{book_id}/audio").json() == []
 
 
-def test_confirm_endpoint_confirms_and_reprocesses(
-    temp_paths, fake_paid_pipeline
-):
+def test_confirm_endpoint_confirms_and_reprocesses(temp_paths, fake_paid_pipeline):
     """Confirmar a estimativa re-enfileira o processamento e o livro chega a ready."""
     with TestClient(app) as client:
         book_id = client.post("/books", files=_upload_files()).json()["id"]
@@ -861,9 +853,7 @@ def test_confirm_endpoint_confirms_and_reprocesses(
 
         assert confirm_response.status_code == 200
         assert confirm_response.json()["status"] == "confirmed"
-        assert (
-            client.get(f"/books/{book_id}/status").json()["cost_confirmed"] is True
-        )
+        assert client.get(f"/books/{book_id}/status").json()["cost_confirmed"] is True
 
         worker_tasks.process_job(queue.claim_next())
         body = client.get(f"/books/{book_id}/status").json()

@@ -223,12 +223,17 @@ def count_text_chunks(text: str, max_chars: int | None = None) -> int:
     return len(chunks)
 
 
-def estimate_cost(text: str) -> float:
-    """Estima o custo de sintetizar o texto com o Speaker configurado, a partir do texto real (sanitizado, como a síntese o recebe): total de caracteres × cost_per_char do Speaker."""
+def estimate_cost(text: str, normalize: bool = False) -> float:
+    """Estima o custo de processar o texto, a partir do texto real (sanitizado, como a síntese o recebe): caracteres × cost_per_char do Speaker, mais o do TextNormalizer quando o livro optou por normalizar (OS-038) — sem isso o nível médio escaparia da trava de custo da OS-042."""
     text = sanitize_text(text)
     cfg = config_module.load_config()
     speaker = registry_module.SPEAKERS[cfg.speaker]()
-    return len(text) * speaker.cost_per_char
+    custo = len(text) * speaker.cost_per_char
+    if normalize:
+        normalizer = _build_normalizer(cfg)
+        if normalizer is not None:
+            custo += len(text) * normalizer.cost_per_char
+    return custo
 
 
 def _split_by_char_limit(text: str, limit: int | None) -> list[str]:
@@ -269,6 +274,22 @@ def _merge_wav_files(paths: list[str]) -> tuple[str, float]:
     return path, len(combined) / (sample_rate or 24000)
 
 
+def _build_normalizer(cfg):
+    """Constrói o TextNormalizer configurado; qualquer falha de construção degrada para 'sem normalização' em vez de derrubar o livro."""
+    factory = registry_module.NORMALIZERS.get(cfg.normalizer)
+    if factory is None:
+        return None
+    if cfg.normalizer == "noop":
+        return factory()
+    return factory(
+        base_url=cfg.normalizer_base_url,
+        model=cfg.normalizer_model,
+        api_key_env=cfg.normalizer_api_key_env,
+        cost_per_char=cfg.normalizer_cost_per_char,
+        divergence_ratio=cfg.normalizer_divergence_ratio,
+    )
+
+
 def _synthesize_with_retry(
     speaker,
     text: str,
@@ -298,8 +319,9 @@ def synthesize_text(
     lang_code: str | None = None,
     sequence_offset: int = 0,
     speaker_name: str | None = None,
+    normalize: bool = False,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos e speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local). Falhas transitórias (TransientSpeakerError) são retentadas com backoff conforme a config retry (OS-043). O texto passa pela sanitização (OS-040) antes de virar chunk."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos e speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local). Falhas transitórias (TransientSpeakerError) são retentadas com backoff conforme a config retry (OS-043). O texto passa pela sanitização (OS-040) antes de virar chunk, e por normalize=True cada chunk ainda passa pelo TextNormalizer configurado (OS-038; padrão False = NoOp, sem rede e sem custo)."""
     text = sanitize_text(text)
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     already_done = skip_sequences or set()
@@ -315,6 +337,9 @@ def synthesize_text(
 
     cfg = config_module.load_config()
     speaker = registry_module.SPEAKERS[speaker_name or cfg.speaker]()
+    # OS-038: sem opt-in, nem o normalizador é construído — o nível simples não paga
+    # nada, nem em latência, nem em rede.
+    normalizer = _build_normalizer(cfg) if normalize else None
     # OS-043: se o Speaker declarar limite de caracteres por requisição, o texto do
     # chunk é dividido em pedaços que respeitam o limite (nunca cortando palavra) e
     # os áudios são concatenados num único AudioChunk — mesma granularidade de sempre.
@@ -322,6 +347,11 @@ def synthesize_text(
 
     audio_chunks: list[AudioChunk] = []
     for sequence, piece in pending:
+        # A normalização acontece ANTES da divisão por limite do engine: ela muda o
+        # tamanho do texto (números por extenso crescem), e medir antes daria um
+        # orçamento errado — mesma razão da OS-037 com o mapa fonético.
+        if normalizer is not None:
+            piece = normalizer.normalize(piece)
         pieces = _split_by_char_limit(piece, char_limit)
         sub_chunks = [
             _synthesize_with_retry(

@@ -31,7 +31,9 @@ _BLOCKED_DELETE_STATUSES = {"extracting", "processing", "synthesizing"}
 
 @router.post("/books")
 async def create_book(
-    file: UploadFile, language: str | None = Form(default=None)
+    file: UploadFile,
+    language: str | None = Form(default=None),
+    normalize_text: bool = Form(default=False),
 ) -> dict[str, str]:
     """Recebe um PDF (e um idioma opcional), salva em disco, cria o Book e enfileira um Job de processamento assíncrono."""
     book_id = str(uuid.uuid4())
@@ -49,6 +51,8 @@ async def create_book(
         status="uploaded",
         created_at=datetime.now(UTC),
         language=valid_language,
+        # Opt-in do nível médio (OS-038): sem isso, NoOp e nenhuma rede.
+        normalize_text=normalize_text,
     )
     db.create_book(book)
 

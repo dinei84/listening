@@ -1,8 +1,8 @@
 # OS-038 — "Ajudante LLM" para normalizar texto antes do TTS (opt-in)
 
-> **Esta OS depende de uma decisão de arquitetura do dono do projeto que ainda NÃO foi tomada** (custo variável de API + risco de alteração de conteúdo — ver seção 2). Não executar antes dessa aprovação. Redigida agora para que a decisão seja tomada com o escopo concreto à vista.
+> **DESBLOQUEADA em 2026-08-06.** A decisão de arquitetura pendente foi tomada pelo dono do projeto: **usar uma LLM barata via endpoint compatível com OpenAI**, com a chave que ele já possui. Custo medido por livro real do acervo (Programador Pragmático, 649k caracteres ≈ 216 mil tokens de entrada): **~US$ 0,16–0,87 por livro** — duas ordens de grandeza abaixo do TTS cloud do premium (US$ 8–107). Isso é o que torna o **nível médio** viável.
 >
-> **Executar depois da OS-035 e da OS-037**, e só se, depois delas, os problemas de números/abreviações ainda incomodarem em uso real.
+> **Provedor não é lock-in:** `TextNormalizer` é contrato de plugin, e a implementação mira o formato **compatível com OpenAI** (DeepSeek, Groq, Together, OpenRouter, OpenAI e outros expõem o mesmo shape) — trocar de provedor é mudar `base_url`, modelo e chave em `config.yaml`, sem código novo.
 
 ## 1. Objetivo
 
@@ -32,6 +32,8 @@ Normalizar o texto antes de mandá-lo ao TTS usando uma LLM barata: expandir nú
   - nunca deixar a LLM "sumir" com um trecho silenciosamente.
 - **Falha de rede/API não pode derrubar o livro**: degradar para o texto original, mesmo espírito do fallback de idioma do `KokoroSpeaker` (OS-020) e da leitura de TOC (OS-027).
 - **Cache**: um mesmo chunk não deve ser reenviado à LLM numa retomada (OS-022) ou re-priorização (OS-032) — senão o custo se multiplica a cada interrupção. Onde guardar (tabela nova, ou junto do chunk) é decisão de implementação.
+- **Provedor configurável por `config.yaml`**, não fixo no código: `base_url`, `model`, e a chave lida de **variável de ambiente** (nunca em arquivo versionado). Mirar o formato compatível com OpenAI (`POST {base_url}/chat/completions`), que a maioria dos provedores baratos expõe — isso é o que torna a troca de provedor gratuita.
+- **Validação inicial obrigatória com o provedor real** (fora da suíte, como a OS-041 fez com TTS): rodar o normalizador em trechos reais de um livro do acervo e conferir três coisas no relatório — (a) `R$ 50` vira "cinquenta reais" e não "cinquenta dólares"; (b) nenhum conteúdo sumiu; (c) a saída **não** vem com comentário do modelo junto ("Aqui está o texto formatado:"), que é o modo de falha mais comum e passaria direto pelo guarda-corpo de tamanho.
 - **Nenhuma chamada real à LLM na suíte de testes** — dublê sempre, conforme `AGENTS.md` seção 4 e `TDD.md`.
 
 **Fora do escopo:**
