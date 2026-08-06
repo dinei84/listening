@@ -20,7 +20,7 @@ Padrão (`AGENTS.md` seção 4):
 - [x] Type hints e docstring de uma linha em toda função pública
 - [x] `PROJECT_STATE.md` atualizado
 - [x] Relatório criado em `docs/report/OS-044-report.md`
-- [ ] PR aberto — pendente da decisão do dono do projeto sobre a ordem de merge (ver seção 6)
+- [x] PR aberto — https://github.com/dinei84/listening/pull/41
 
 Específico (seção 4 da OS):
 
@@ -115,7 +115,7 @@ Dois, ambos por medição:
 
 ## 6. Dúvidas / bloqueios
 
-**Ordem de merge.** Este branch está empilhado sobre `fix/observabilidade-normalizador`, que contém trabalho de responsabilidade diferente (ligar o normalizador LLM + configurar logging). Foram separados para não inchar o PR, conforme a seção 3 do `AGENTS.md`, mas isso significa que o PR desta OS deve entrar **depois** do PR do fix, ou os dois juntos. Decisão do dono do projeto.
+**Ordem de merge — resolvida.** Este branch estava empilhado sobre `fix/observabilidade-normalizador`, que contém trabalho de responsabilidade diferente (ligar o normalizador LLM + configurar logging). Foram separados para não inchar o PR, conforme a seção 3 do `AGENTS.md`. O dono aprovou o merge dos dois: o PR do fix (https://github.com/dinei84/listening/pull/40) entrou primeiro, e este veio em seguida.
 
 **Fora de escopo, registrado para backlog:** ordinais escritos sem o caractere correto (`1o`, `2a` em vez de `1º`, `2ª`) são lidos como "um o" e "dois a". Foi medido e confirmado, mas não estava entre os quatro itens aprovados para esta OS. Os ordinais com `º`/`ª` de verdade já funcionam ("primeiro", "décima").
 
@@ -123,4 +123,4 @@ Dois, ambos por medição:
 
 ## 7. Link do PR
 
-Pendente — ver seção 6.
+https://github.com/dinei84/listening/pull/41
