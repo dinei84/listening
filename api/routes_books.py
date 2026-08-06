@@ -76,21 +76,46 @@ async def list_books() -> list[dict[str, str]]:
 
 
 @router.get("/books/{book_id}/status")
-async def get_book_status(book_id: str) -> dict[str, str | int | None]:
-    """Devolve o status persistido de um Book, o progresso da síntese (chunks_done/chunks_total), o title e error_message quando status == 'error'. 404 se o id não existir."""
+async def get_book_status(book_id: str) -> dict[str, str | int | None | float | bool]:
+    """Devolve o status persistido de um Book, o progresso da síntese (chunks_done/chunks_total), o title, error_message quando status == 'error' e os campos da trava de custo (OS-042). 404 se o id não existir."""
     book = db.get_book(book_id)
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
-    response: dict[str, str | int | None] = {
+    response: dict[str, str | int | None | float | bool] = {
         "id": book.id,
         "title": book.title,
         "status": book.status,
         "chunks_done": len(audio_store.list_chunks(book_id)),
         "chunks_total": book.chunk_total,
+        "estimated_cost": book.estimated_cost,
+        "cost_confirmed": book.cost_confirmed,
+        "cost_degraded": book.cost_degraded,
     }
     if book.status == "error":
         response["error_message"] = book.error_message
     return response
+
+
+@router.post("/books/{book_id}/confirm")
+async def confirm_book_cost(book_id: str) -> dict[str, str]:
+    """Confirma a estimativa de custo de um livro pago em espera (OS-042): marca cost_confirmed e re-enfileira o processamento. 404 se o livro não existir; 409 se ele não estiver aguardando confirmação."""
+    book = db.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if book.status != "pending_confirmation":
+        raise HTTPException(
+            status_code=409, detail="Book is not awaiting cost confirmation"
+        )
+
+    db.set_book_cost_confirmed(book_id, True)
+    db.update_book_status(book_id, "uploaded")
+
+    cfg = config_module.load_config()
+    queue = registry_module.QUEUES[cfg.queue]()
+    job = Job(id=str(uuid.uuid4()), book_id=book_id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    return {"id": book_id, "status": "confirmed"}
 
 
 @router.post("/books/{book_id}/prioritize")

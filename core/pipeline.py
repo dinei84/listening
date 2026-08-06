@@ -217,6 +217,14 @@ def count_text_chunks(text: str, max_chars: int | None = None) -> int:
     return len(chunks)
 
 
+def estimate_cost(text: str) -> float:
+    """Estima o custo de sintetizar o texto com o Speaker configurado, a partir do texto real (sanitizado, como a síntese o recebe): total de caracteres × cost_per_char do Speaker."""
+    text = sanitize_text(text)
+    cfg = config_module.load_config()
+    speaker = registry_module.SPEAKERS[cfg.speaker]()
+    return len(text) * speaker.cost_per_char
+
+
 def synthesize_text(
     text: str,
     chapter_id: str,
@@ -225,8 +233,9 @@ def synthesize_text(
     skip_sequences: set[int] | None = None,
     lang_code: str | None = None,
     sequence_offset: int = 0,
+    speaker_name: str | None = None,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática) e sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos. O texto passa pela sanitização (OS-040) antes de virar chunk."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos e speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local). O texto passa pela sanitização (OS-040) antes de virar chunk."""
     text = sanitize_text(text)
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     already_done = skip_sequences or set()
@@ -241,7 +250,7 @@ def synthesize_text(
         return []
 
     cfg = config_module.load_config()
-    speaker = registry_module.SPEAKERS[cfg.speaker]()
+    speaker = registry_module.SPEAKERS[speaker_name or cfg.speaker]()
 
     audio_chunks: list[AudioChunk] = []
     for sequence, piece in pending:

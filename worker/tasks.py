@@ -16,7 +16,7 @@ class _YieldRequested(Exception):
 
 
 def process_job(job: Job) -> None:
-    """Roda o pipeline para o Book do job — pulando os AudioChunks já persistidos por uma tentativa anterior — e marca o Book/Job como concluído ou falho."""
+    """Roda o pipeline para o Book do job — pulando os AudioChunks já persistidos por uma tentativa anterior — e marca o Book/Job como concluído ou falho. Antes da síntese, estima o custo do livro e aplica a trava de custo (OS-042): estimativa acima de zero sem confirmação explícita deixa o livro aguardando confirmação; estimativa acima do teto degrada para a voz local."""
     cfg = config_module.load_config()
     queue = registry_module.QUEUES[cfg.queue]()
 
@@ -31,6 +31,39 @@ def process_job(job: Job) -> None:
         # OS-027: o livro é extraído e limpo por capítulo, não mais numa tacada só.
         chapters = pipeline.extract_chapters(str(pdf_path))
         db.create_chapters(job.book_id, chapters)
+
+        # OS-042: a estimativa acontece ANTES de qualquer chamada ao Speaker. A
+        # extração já rodou acima, então o texto real está disponível aqui. O custo
+        # do Kokoro (cost_per_char == 0.0) dá zero e segue o fluxo antigo sem fricção.
+        estimate = sum(pipeline.estimate_cost(chapter.text) for chapter in chapters)
+        db.set_book_estimated_cost(job.book_id, estimate)
+
+        cap = cfg.max_cost_per_book
+        if estimate > 0 and cap is not None and estimate > cap:
+            # Teto de segurança (OS-042): mesmo confirmado, o Speaker pago não roda —
+            # degrada para a voz local (fallback_speaker) e segue a síntese normal.
+            degraded = True
+            db.set_book_cost_degraded(job.book_id, True)
+            logger.info(
+                "Book %s: estimativa %.6f acima do teto %.6f; degradando para voz local",
+                job.book_id,
+                estimate,
+                cap,
+            )
+        elif estimate > 0 and not book.cost_confirmed:
+            # Confirmação explícita (OS-042): livro pago sem confirmação fica
+            # aguardando; o Job desta rodada (extração + estimativa) é encerrado e a
+            # confirmação enfileira um Job novo.
+            db.update_book_status(job.book_id, "pending_confirmation")
+            logger.info(
+                "Book %s: estimativa %.6f; aguardando confirmação de custo",
+                job.book_id,
+                estimate,
+            )
+            queue.mark_done(job.id)
+            return
+        else:
+            degraded = False
 
         already_done = {
             chunk.sequence for chunk in audio_store.list_chunks(job.book_id)
@@ -80,6 +113,7 @@ def process_job(job: Job) -> None:
                 skip_sequences=already_done,
                 lang_code=lang_code,
                 sequence_offset=offset,
+                speaker_name=cfg.fallback_speaker if degraded else None,
             )
             offset += chapter_chunks
         db.update_book_status(job.book_id, "ready")

@@ -18,6 +18,9 @@ const playerSection = document.getElementById("player-section");
 const playerTitle = document.getElementById("player-title");
 const playerStatus = document.getElementById("player-status");
 const synthesisProgress = document.getElementById("synthesis-progress");
+const costWarning = document.getElementById("cost-warning");
+const confirmCostBanner = document.getElementById("confirm-cost-banner");
+const confirmCostBtn = document.getElementById("confirm-cost-btn");
 const positionIndicator = document.getElementById("position-indicator");
 const chaptersSection = document.getElementById("chapters-section");
 const chaptersList = document.getElementById("chapters-list");
@@ -69,6 +72,8 @@ function statusLabel(status) {
       return "Erro";
     case "paused":
       return "Pausado";
+    case "pending_confirmation":
+      return "Aguardando confirmação de custo";
     default:
       return status;
   }
@@ -268,6 +273,33 @@ async function prioritizeBook(bookId) {
   }
 }
 
+async function confirmBookCost(bookId) {
+  const response = await fetch(`/books/${bookId}/confirm`, { method: "POST" });
+  if (!response.ok) {
+    let message = "Falha ao confirmar o custo";
+    try {
+      const data = await response.json();
+      if (data && data.detail) message = data.detail;
+    } catch (err) {
+      // mantém a mensagem padrão
+    }
+    throw new Error(message);
+  }
+}
+
+function canConfirmCost(status) {
+  return status === "pending_confirmation";
+}
+
+function formatEstimate(cost) {
+  if (cost === null || cost === undefined) return "";
+  return cost.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  });
+}
+
 function renderBooksList(books) {
   booksList.innerHTML = "";
   booksListEmpty.hidden = books.length > 0;
@@ -291,6 +323,21 @@ function renderBooksList(books) {
       }
     });
 
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.textContent = "Confirmar custo";
+    confirmBtn.disabled = !canConfirmCost(book.status);
+    confirmBtn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      try {
+        await confirmBookCost(book.id);
+        refreshBooksList();
+        openBook(book.id, null, book.title);
+      } catch (err) {
+        window.alert(`Erro ao confirmar: ${err.message}`);
+      }
+    });
+
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.textContent = "Deletar";
@@ -310,6 +357,7 @@ function renderBooksList(books) {
     });
     li.appendChild(label);
     li.appendChild(prioritizeBtn);
+    li.appendChild(confirmBtn);
     li.appendChild(deleteBtn);
     booksList.appendChild(li);
   }
@@ -386,7 +434,13 @@ function renderSynthesisProgress(status, chunksDone, chunksTotal) {
   synthesisProgress.value = Math.min(chunksDone, chunksTotal);
 }
 
-function statusMessage(status, chunksDone, chunksTotal) {
+function statusMessage(status, chunksDone, chunksTotal, statusData) {
+  if (status === "pending_confirmation") {
+    const custo = statusData && statusData.estimated_cost;
+    return `Aguardando confirmação de custo — este livro deve custar ${
+      custo ? formatEstimate(custo) : "?"
+    }.`;
+  }
   if (status === "paused") {
     return chunks.length > 0
       ? "Pausado — tocando o que já foi sintetizado."
@@ -399,6 +453,9 @@ function statusMessage(status, chunksDone, chunksTotal) {
   }
   if (status === "ready") {
     if (chunks.length === 0) return "Nenhum áudio disponível.";
+    if (statusData && statusData.cost_degraded) {
+      return "Pronto — processado com voz local (custo acima do teto).";
+    }
     return waitingForNextChunk ? "Fim do áudio." : "Pronto.";
   }
   if (waitingForNextChunk) return WAITING_MESSAGE;
@@ -461,6 +518,17 @@ async function pollBook(bookId) {
     statusData.chunks_total
   );
 
+  // Trava de custo (OS-042): livro em espera mostra a estimativa + botão de
+  // confirmar; livro degradado por teto mostra o aviso.
+  confirmCostBanner.hidden = bookStatus !== "pending_confirmation";
+  costWarning.hidden = !(
+    bookStatus === "ready" && statusData.cost_degraded
+  );
+  if (!costWarning.hidden) {
+    costWarning.textContent =
+      "Processado com voz local — o custo estimado ultrapassou o teto configurado.";
+  }
+
   let added = 0;
   try {
     added = mergeChunks(await fetchAudioChunks(bookId));
@@ -500,7 +568,8 @@ async function pollBook(bookId) {
   playerStatus.textContent = statusMessage(
     bookStatus,
     statusData.chunks_done,
-    statusData.chunks_total
+    statusData.chunks_total,
+    statusData
   );
 }
 
@@ -584,6 +653,8 @@ function resetPlaybackState() {
   updateNavButtons();
   resumeBanner.hidden = true;
   synthesisProgress.hidden = true;
+  costWarning.hidden = true;
+  confirmCostBanner.hidden = true;
   positionIndicator.hidden = true;
   chaptersSection.hidden = true;
   chaptersList.innerHTML = "";
@@ -645,6 +716,18 @@ uploadForm.addEventListener("submit", async (event) => {
 
 refreshBooksBtn.addEventListener("click", () => {
   refreshBooksList();
+});
+
+confirmCostBtn.addEventListener("click", async () => {
+  if (!currentBookId) return;
+  try {
+    await confirmBookCost(currentBookId);
+    confirmCostBanner.hidden = true;
+    refreshBooksList();
+    pollBook(currentBookId);
+  } catch (err) {
+    window.alert(`Erro ao confirmar: ${err.message}`);
+  }
 });
 
 manualForm.addEventListener("submit", (event) => {
