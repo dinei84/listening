@@ -227,7 +227,9 @@ def test_sanitize_expands_numeric_date_to_month_name():
     assert sanitize_text("Publicado em 12/03/2019.") == (
         "Publicado em 12 de março de 2019."
     )
-    assert sanitize_text("Em 01/12/99 aconteceu.") == "Em 01 de dezembro de 99 aconteceu."
+    assert (
+        sanitize_text("Em 01/12/99 aconteceu.") == "Em 01 de dezembro de 99 aconteceu."
+    )
 
 
 def test_sanitize_keeps_non_date_slash_untouched():
