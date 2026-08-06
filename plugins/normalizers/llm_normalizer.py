@@ -90,6 +90,15 @@ class LLMNormalizer(TextNormalizer):
             return text
 
         aceito = self._accept(text, saida)
+        # Toda rejeição do guarda-corpo loga WARNING, mas a aceitação era silenciosa:
+        # sem esta linha, "normalizou e nada mudou" e "nunca foi chamado" produzem
+        # exatamente o mesmo log, e não há como saber qual dos dois aconteceu.
+        if aceito != text:
+            logger.info(
+                "Normalizador aplicado: %d -> %d caracteres", len(text), len(aceito)
+            )
+        else:
+            logger.info("Normalizador não alterou o trecho (%d caracteres)", len(text))
         self._cache[text] = aceito
         return aceito
 
