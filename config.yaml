@@ -19,9 +19,9 @@ retry:
 # "noop" (padrão) não toca a rede e não custa nada.
 # Para ligar o nível médio: name: llm, e a chave numa variável de ambiente.
 normalizer:
-  name: noop
-  # base_url: https://api.deepseek.com/v1   # qualquer endpoint compatível com OpenAI
-  # model: deepseek-chat
-  # api_key_env: LLM_API_KEY                # a chave NUNCA fica neste arquivo
-  # cost_per_char: 0.0000012                # para a trava de custo da OS-042
-  # divergence_ratio: 0.5                   # janela do guarda-corpo
+  name: llm
+  base_url: https://api.deepseek.com/v1   # qualquer endpoint compatível com OpenAI
+  model: deepseek-chat
+  api_key_env: LLM_API_KEY                # a chave NUNCA fica neste arquivo
+  cost_per_char: 0.0000012                # para a trava de custo da OS-042
+  # divergence_ratio: 0.5                 # janela do guarda-corpo (padrão: +100%/-15%)

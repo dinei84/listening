@@ -194,4 +194,16 @@ def run_worker(poll_interval: float = 1.0, max_iterations: int | None = None) ->
 
 
 if __name__ == "__main__":
+    # Sem isto o root logger fica sem handler: o lastResort do Python emite WARNING
+    # em diante, mas todo logger.info do worker (confirmação de custo, retomada,
+    # preempção) some sem deixar rastro — o que torna o pipeline indiagnosticável.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    )
+    # INFO global também liga o INFO das bibliotecas: o httpx narra cada HEAD que o
+    # Kokoro faz no HuggingFace e afoga as linhas do pipeline. Em WARNING elas ainda
+    # aparecem quando têm algo de fato a dizer.
+    for ruidoso in ("httpx", "httpcore", "huggingface_hub", "urllib3", "filelock"):
+        logging.getLogger(ruidoso).setLevel(logging.WARNING)
     run_worker()
