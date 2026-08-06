@@ -107,6 +107,42 @@ Nenhum. Mudanças em `processing/sanitizer.py` (novo), `core/pipeline.py` (duas 
 
 Nenhum. Duas observações, sem decisão de arquitetura deste agente: (1) o mapa de símbolos cobre o conjunto matemático/comum (a OS pede `≠ ± → ≈` no mínimo) — ampliar (ex: `<`/`>`) foi deliberadamente evitado para não transformar tags HTML em "menor b maior"; (2) código inline não cercado segue lido símbolo a símbolo (limitação documentada na seção 5, item 3) — se o uso real pedir, vira uma OS própria com heurística mais fina.
 
+## 7.1 Correções aplicadas na revisão (pós-relatório original)
+
+A revisão do PR encontrou **dois defeitos reais**, ambos da categoria que a seção 3 da OS destacava como a mais perigosa ("a sanitização não pode comer texto normal"). Corrigidos neste mesmo branch, com testes Red antes do Green.
+
+**1. Moeda brasileira lida como dólar, e na ordem errada.** `$` estava no mapa genérico de símbolos, então `R$ 50` virava `Rdólares 50` — em livro brasileiro `R$` é **real**, e em português a moeda vem **depois** do número.
+
+```
+antes : 'Custou R$ 50 no total.' -> 'Custou Rdólares 50 no total.'
+        G2P: kustˈow ɾədˈɔlæɾys sˌiŋkwˈAŋtæ nʊ totˈW.     ("custou rê-dólares cinquenta")
+depois: 'Custou R$ 50 no total.' -> 'Custou 50 reais no total.'
+        G2P: kustˈow sˌiŋkwˈAŋtæ xeˈIz nʊ totˈW.          ("custou cinquenta reais")
+```
+
+Moeda saiu do `SYMBOL_TO_WORD` e ganhou tratamento próprio (`CURRENCY_TO_WORD` + `_map_currency`), que reposiciona o valor: `R$`→reais, `US$`/`$`→dólares, `€`→euros, `£`→libras. O valor precisa **terminar em dígito**, senão `R$ 1.200,00.` levava o ponto final junto e virava `1.200,00. reais`.
+
+**2. Perda silenciosa de conteúdo em frase iniciada por número.** A regra de lista numerada (`\d{1,3}[.)]\s+` em início de linha) comia o número de qualquer frase:
+
+```
+antes : '42. Esse e o numero da resposta.'  -> 'Esse e o numero da resposta.'
+        '800. Carlos Magno foi coroado.'    -> 'Carlos Magno foi coroado.'
+depois: ambos preservados integralmente
+```
+
+O marcador numerado agora só é removido quando a linha **encosta em outro item de lista** (numerado ou bullet) — o que caracteriza uma lista de verdade. Isso exigiu rodar o tratamento de numerados **antes** do de bullets, para que as linhas vizinhas ainda estejam com seus marcadores visíveis. Lista real continua sendo limpa:
+
+```
+'1. Primeiro item\n2. Segundo item'      -> 'Primeiro item\nSegundo item'
+'- item um\n* item dois\n1. item tres'   -> 'item um\nitem dois\nitem tres'
+```
+
+O teste original `test_sanitize_removes_headings_quotes_and_list_markers` **continua passando sem ser afrouxado** — foi o que motivou a regra considerar bullets vizinhos, e não só numerados consecutivos.
+
+**Alarme falso investigado e descartado:** a substituição de símbolo não insere espaço (`50%` → `50por cento`), o que parecia bug. Medido com o G2P real: `'50por cento'` e `'50 por cento'` produzem **fonemas idênticos** (`sˌiŋkwˈAŋtæ por sˈAŋtʊ`). É estranho no texto, inaudível no áudio — não foi alterado.
+
+Testes novos: `test_sanitize_reads_brazilian_currency_as_reais_after_the_number`, `test_sanitize_reads_other_currencies_after_the_number`, `test_sanitize_keeps_sentence_starting_with_a_number`, `test_sanitize_still_strips_real_numbered_list`. Suíte completa: **239 passed, 0 failed**.
+
 ## 8. Link do PR
 
 https://github.com/dinei84/listening/pull/35
