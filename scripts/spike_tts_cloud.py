@@ -14,6 +14,9 @@ Requisitos da OS-041:
       AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (+ região AWS_DEFAULT_REGION)
       OPENAI_API_KEY
       ELEVENLABS_API_KEY
+      AZURE_SPEECH_KEY + AZURE_SPEECH_REGION (padrão brazilsouth)
+        opcionais: AZURE_SPEECH_VOICE (padrão pt-BR-FranciscaNeural),
+                   AZURE_SPEECH_STYLE (padrão calm)
   - Áudios salvos fora do repositório, em AUDIO_OUTPUT_DIR (padrão /tmp/os041-audio).
 
 Executar:
@@ -30,6 +33,7 @@ import time
 import urllib.request
 import wave
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -105,6 +109,24 @@ PROVIDERS = {
         "char_limit_note": "5.000 caracteres por chamada (API Reference)",
         "pricing_source": "https://elevenlabs.io/pricing/",
     },
+    # Azure entra depois dos demais (2026-08-07): é o único provedor com controle
+    # de ESTILO DE FALA em pt-BR (<mstts:express-as>), que é a variável decisiva
+    # para a entonação — o motivo pelo qual o nível premium existe. Duas entradas
+    # de propósito: sem estilo e com estilo, para isolar quanto o estilo entrega.
+    "azure": {
+        "label": "Azure Neural (sem estilo)",
+        "env_var": "AZURE_SPEECH_KEY",
+        "char_limit_per_request": None,
+        "char_limit_note": "limitado por tamanho do corpo SSML e por 10 min de áudio por chamada, não por contagem fixa de caracteres (a confirmar na medição)",
+        "pricing_source": "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/",
+    },
+    "azure_style": {
+        "label": "Azure Neural (com <mstts:express-as>)",
+        "env_var": "AZURE_SPEECH_KEY",
+        "char_limit_per_request": None,
+        "char_limit_note": "idem 'azure'",
+        "pricing_source": "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/",
+    },
 }
 
 # Preço oficial por 1M de caracteres (moeda das fontes: USD), levantado em 2026-08-06.
@@ -159,7 +181,35 @@ PRICE_PER_MILLION_CHARS = {
         "date": "2026-08-06",
         "note": "1 caractere = 1 crédito; planos mensais: Starter $6/30k créditos, Creator $22/121k, Pro $99/600k (~US$165/1M no Pro)",
     },
+    "Azure Neural": {
+        "usd": 16.00,
+        "source": "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/",
+        "date": "2026-08-07",
+        "note": "franquia de 0,5M caracteres/mês. ATENÇÃO: o Azure cobra a marcação SSML como caractere (exceto <speak> e <voice>) — ver SSML_BILLING_NOTE",
+    },
+    "Azure Neural HD": {
+        "usd": 22.00,
+        "source": "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/",
+        "date": "2026-08-07",
+        "note": "reduzido de US$30 para US$22/1M em março de 2026; tiers de commitment chegam a US$7,50/1M",
+    },
 }
+
+# Achado que muda o desenho, não só o orçamento (levantado 2026-08-07): no Azure,
+# toda marcação SSML no corpo da requisição é cobrada como caractere, exceto
+# <speak> e <voice>. Medido sobre "Arquitetura Limpa" (533.371 chars, ~5.333 frases)
+# a US$16/1M:
+#     texto puro, estilo aplicado 1x no documento ... US$  8,53   (+0%)
+#     + <break/> por frase ......................... US$ 10,33  (+21%)
+#     + estilo por frase ........................... US$ 13,14  (+54%)
+#     + break E estilo por frase ................... US$ 14,93  (+75%)
+# Consequência prática: a pausa da OS-045, inserida no ÁUDIO depois da síntese,
+# continua custando zero mesmo com motor pago — fazer a mesma pausa via <break/>
+# custaria +21% no livro inteiro. Aplicar estilo uma vez por documento (ou por
+# capítulo) em vez de por frase é a diferença entre US$8,53 e US$13,14.
+SSML_BILLING_NOTE = (
+    "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/faq-tts"
+)
 
 
 def _b64(byte_data: bytes) -> str:
@@ -404,6 +454,51 @@ def synthesize_elevenlabs(text: str) -> tuple[bytes | None, str]:
     return audio, _b64(audio)[:64]
 
 
+# --------------------------------- Azure -----------------------------------
+
+
+def _azure_ssml(text: str, voice: str, style: str | None) -> str:
+    """Monta o corpo SSML da requisição, escapando o texto; style=None sai sem <mstts:express-as>."""
+    corpo = xml_escape(text)
+    if style:
+        corpo = f"<mstts:express-as style='{style}'>{corpo}</mstts:express-as>"
+    return (
+        "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' "
+        "xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='pt-BR'>"
+        f"<voice name='{voice}'>{corpo}</voice></speak>"
+    )
+
+
+def synthesize_azure(text: str, style: str | None = None) -> tuple[bytes | None, str]:
+    """Chamada ao endpoint REST de TTS do Azure (pt-BR); style aplica <mstts:express-as>."""
+    key = os.environ["AZURE_SPEECH_KEY"]
+    region = os.environ.get("AZURE_SPEECH_REGION", "brazilsouth")
+    voice = os.environ.get("AZURE_SPEECH_VOICE", "pt-BR-FranciscaNeural")
+    ssml = _azure_ssml(text, voice, style)
+    req = urllib.request.Request(
+        f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1",
+        data=ssml.encode("utf-8"),
+        headers={
+            "Ocp-Apim-Subscription-Key": key,
+            "Content-Type": "application/ssml+xml",
+            # 'raw-' e não 'riff-': _write_wav monta o container WAV, então pedir
+            # riff traria um cabeçalho próprio que sairia duplicado no arquivo.
+            # 24 kHz casa com SAMPLE_RATE, o mesmo do Kokoro — comparação justa.
+            "X-Microsoft-OutputFormat": "raw-24khz-16bit-mono-pcm",
+            # Exigido pela API; sem ele a requisição volta 400.
+            "User-Agent": "os041-spike-tts-cloud",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        audio = resp.read()
+    return audio, _b64(audio)[:64]
+
+
+def synthesize_azure_style(text: str) -> tuple[bytes | None, str]:
+    """Mesma chamada, com o estilo de fala configurado — é a variável que o spike quer isolar."""
+    return synthesize_azure(text, style=os.environ.get("AZURE_SPEECH_STYLE", "calm"))
+
+
 def _env_available(*names: str) -> bool:
     return all(os.environ.get(n) for n in names)
 
@@ -417,7 +512,7 @@ def main() -> None:
         "credenciais detectadas: "
         + ", ".join(
             p
-            for p in ("google", "polly", "openai", "elevenlabs")
+            for p in ("google", "polly", "openai", "elevenlabs", "azure")
             if _env_available(PROVIDERS[p]["env_var"])
         )
         or "nenhuma"
@@ -447,13 +542,15 @@ def main() -> None:
     print(json.dumps({"kokoro": results["kokoro"]}, indent=2, ensure_ascii=False))
 
     # Provedores cloud — só chamam se a credencial existir.
-    for key in ("google", "polly", "openai", "elevenlabs"):
+    for key in ("google", "polly", "openai", "elevenlabs", "azure", "azure_style"):
         meta = PROVIDERS[key]
         fn = {
             "google": synthesize_google,
             "polly": synthesize_polly,
             "openai": synthesize_openai,
             "elevenlabs": synthesize_elevenlabs,
+            "azure": synthesize_azure,
+            "azure_style": synthesize_azure_style,
         }[key]
         label = meta["label"]
         if not _env_available(meta["env_var"]):
