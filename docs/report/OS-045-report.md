@@ -108,6 +108,33 @@ segmento B: 208 ms de silêncio inicial, 299 ms final
 
 Suíte: `305 passed`. `ruff check`: `All checks passed!`
 
+### Correção de rumo após avaliação de escuta
+
+A primeira versão desta OS foi **reprovada na escuta** e corrigida antes do merge. O registro fica aqui porque o erro é instrutivo e a medição sozinha não o teria pego.
+
+Sintomas relatados: ritmo "exageradamente lento", voz "robotizada, quase como se fosse quebrar", e — pior — **piora na entonação**: a interrogação, que antes dava para ouvir de leve, ficou lisa.
+
+Causa, identificada por construção e não por medição: dividir o texto em vírgula, ponto e vírgula e dois pontos entrega ao modelo cada fragmento como **enunciado independente**, sem contexto do que vem antes ou depois. Ele então aplica contorno de frase completa — com queda final — no meio da oração. Isso explica a emenda audível e o achatamento da entonação ao mesmo tempo.
+
+Tentei confirmar por contorno de F0, mas o método (autocorrelação em fatias) mostrou-se grosseiro demais para servir de prova — a frase declarativa registrou variação final maior que a interrogativa, o que é ruído do estimador. **Registrado como medição inconclusiva**, não como evidência.
+
+Correções aplicadas:
+
+| | v1 (reprovada) | v2 (entregue) |
+|---|---|---|
+| Divisão | `, ; : . ! ?` | só `. ! ?` |
+| `NARRATION_SPEED` | 0.90 | 1.0 |
+| Ponto final | 650 ms | 420 ms |
+| Exclamação | 750 ms | 520 ms |
+| Parágrafo | 1100 ms | 800 ms |
+| WPM | 140,5 | **159,0** |
+
+Os valores ficaram **abaixo** dos 500–800 ms do guia de propósito: o guia assume controle total do motor de voz, mas aqui ele é só uma das duas fontes de pausa — o modelo já produz a sua. Somar as duas foi o que soou arrastado.
+
+`test_split_into_pause_segments_never_splits_inside_a_sentence` trava a regressão.
+
+**Validação final:** aprovada na escuta pelo dono do projeto, com a voz `pf_dora`.
+
 ## 5. Desvios do escopo original
 
 **A velocidade aprovada era 0.80; foi entregue 0.90.** O dono escolheu o alvo de ~146 WPM a partir de uma tabela medida **sem** as pausas. Com o silêncio calibrado inserido, o mesmo 0.80 passou a entregar ~125 WPM, porque a pausa também conta no tempo total. Para honrar o alvo escolhido (140–160 WPM), a velocidade foi recalibrada para 0.90, que mede 146,6 WPM na prosa de referência. O número que o dono escolheu foi preservado; a constante que o produz é que mudou.
