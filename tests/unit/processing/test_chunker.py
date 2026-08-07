@@ -61,3 +61,37 @@ def test_chunk_text_does_not_split_on_name_initial():
 def test_chunk_text_still_splits_on_real_sentence_end():
     texto = "Primeira frase. Segunda frase."
     assert chunk_text(texto, max_chars=20) == ["Primeira frase.", "Segunda frase."]
+
+
+# --- OS-045: quebra de parágrafo preservada até o Speaker -------------------
+
+
+def test_chunk_text_preserves_paragraph_break():
+    """O chunker juntava tudo com espaço, então a pausa de parágrafo nunca chegava ao Speaker."""
+    texto = "Fim do primeiro bloco.\n\nComeco do segundo bloco."
+    assert chunk_text(texto) == ["Fim do primeiro bloco.\n\nComeco do segundo bloco."]
+
+
+def test_chunk_text_joins_same_paragraph_sentences_with_space():
+    """Dentro do mesmo parágrafo nada muda: espaço simples, como sempre."""
+    texto = "Primeira frase. Segunda frase."
+    assert chunk_text(texto) == ["Primeira frase. Segunda frase."]
+
+
+def test_chunk_text_paragraph_break_does_not_change_chunk_count():
+    """Contrato da OS-022: a quantidade de chunks não pode mudar, só o conteúdo."""
+    com_paragrafo = "Uma frase aqui.\n\nOutra frase ali.\n\nUma terceira frase."
+    sem_paragrafo = "Uma frase aqui. Outra frase ali. Uma terceira frase."
+    assert len(chunk_text(com_paragrafo)) == len(chunk_text(sem_paragrafo))
+
+
+def test_chunk_text_treats_heading_without_punctuation_as_paragraph():
+    """Título não termina em pontuação, mas o bloco seguinte ainda é outro parágrafo."""
+    texto = "Bloco 1 - Introducao\n\nA primeira frase do bloco."
+    assert chunk_text(texto) == ["Bloco 1 - Introducao\n\nA primeira frase do bloco."]
+
+
+def test_chunk_text_collapses_single_newline_into_space():
+    """Quebra de linha simples é continuação da mesma frase, não parágrafo."""
+    texto = "Uma frase que continua\nna linha de baixo."
+    assert chunk_text(texto) == ["Uma frase que continua na linha de baixo."]
