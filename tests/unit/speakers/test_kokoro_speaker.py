@@ -427,7 +427,9 @@ def test_phonetic_map_file_loads_real_entries():
 def test_synthesize_uses_narration_speed(monkeypatch):
     """178 WPM medidos no speed 1.0 fixo; o alvo do guia para texto simples é 140-160."""
     factory = PipelineFactory()
-    monkeypatch.setattr(KokoroSpeaker, "_build_pipeline", lambda self, lang: factory(lang))
+    monkeypatch.setattr(
+        KokoroSpeaker, "_build_pipeline", lambda self, lang: factory(lang)
+    )
     KokoroSpeaker().synthesize(PT_TEXT, lang_code="p")
     _, (_, _, speed) = factory.single_call()
     assert speed == kokoro_speaker_module.NARRATION_SPEED
@@ -467,7 +469,9 @@ def test_split_into_pause_segments_detects_paragraph():
 def test_pause_hierarchy_matches_the_guide():
     """Hoje o Kokoro dá 169/195/203 ms para vírgula/ponto-e-vírgula/ponto — indistinguível."""
     marca = kokoro_speaker_module.PAUSE_MS_BY_MARK
-    assert marca[","] < marca[";"] < marca["."] < kokoro_speaker_module.PARAGRAPH_PAUSE_MS
+    assert (
+        marca[","] < marca[";"] < marca["."] < kokoro_speaker_module.PARAGRAPH_PAUSE_MS
+    )
     assert 200 <= marca[","] <= 300
     assert 400 <= marca[";"] <= 500
     assert 500 <= marca["."] <= 800

@@ -12,6 +12,7 @@ from langdetect import DetectorFactory, LangDetectException, detect
 
 from core.models import AudioChunk
 from plugins.speakers.base import Speaker
+from processing.chunker import is_false_sentence_boundary
 
 # O langdetect é não-determinístico por padrão: a mesma string pode devolver idiomas
 # diferentes entre execuções. Fixar a seed torna a detecção reproduzível.
@@ -65,6 +66,48 @@ MAX_PHONEMES = 510
 # não exija mexer em código — ver RUNBOOK.md.
 PHONETIC_MAP_PATH = Path(__file__).with_name("phonetic_map.yaml")
 
+SAMPLE_RATE = 24000
+
+# Velocidade da narração (OS-045). O speed=1.0 anterior media 178 WPM na voz
+# pf_dora — acima até da faixa de "notícias" do guia de ritmo.
+#
+# Calibrado com as pausas de PAUSE_MS_BY_MARK JÁ aplicadas, e essa ordem importa:
+# medida só na articulação, 0.80 dava os ~146 WPM alvo, mas o silêncio inserido
+# também conta no tempo total, e o mesmo 0.80 desabava para ~125 WPM. Em prosa
+# representativa (20,5 palavras/frase), 0.90 entrega 146,6 WPM — dentro dos
+# 140-160 do guia para leitura contínua. Quem quiser outro ritmo usa o controle
+# do player, que escala fala e pausa juntas (seção 3 do guia).
+NARRATION_SPEED = 0.90
+
+# Pausa alvo por sinal, em ms (guia de ritmo, seção 1). O Kokoro sozinho produz
+# 169/195/203 ms para vírgula/ponto-e-vírgula/ponto — contra 95 ms sem pontuação
+# nenhuma, ou seja, praticamente não distingue os níveis. Sem esta tabela não há
+# hierarquia rítmica, e é ela que dá ao ouvinte o sinal de onde uma ideia acaba.
+PAUSE_MS_BY_MARK = {
+    ",": 250,
+    ";": 450,
+    ":": 450,
+    ".": 650,
+    # Acima do ponto final de propósito: o Kokoro-82M não tem controle de ênfase
+    # (ressalva da decisão #23), então a exclamação só consegue se destacar pelo
+    # tempo. É paliativo — dá relevo à frase, não emoção.
+    "!": 750,
+    "?": 650,
+}
+DEFAULT_PAUSE_MS = 250
+PARAGRAPH_PAUSE_MS = 1100
+
+# Margem de segurança do aparo: o corte para no primeiro ponto acima do limiar,
+# e consoantes surdas (/s/, /f/, /p/) começam muito baixo — sem esta folga o
+# ataque da palavra seria comido.
+TRIM_GUARD_MS = 15
+TRIM_THRESHOLD = 0.02
+
+_PARAGRAPH_BREAK_RE = re.compile(r"\n\s*\n")
+# Divide DEPOIS do sinal, mantendo-o no segmento que ele encerra — a entonação da
+# vírgula pertence à oração que termina nela, não à seguinte.
+_PAUSE_MARK_RE = re.compile(r"(?<=[,;:.!?])\s+")
+
 
 @functools.lru_cache(maxsize=1)
 def _phonetic_map() -> dict[str, str]:
@@ -97,6 +140,63 @@ def _apply_phonetic_map(text: str) -> str:
 
     por_minuscula = {k.lower(): v for k, v in mapa.items()}
     return padrao.sub(lambda m: por_minuscula[m.group(1).lower()], text)
+
+
+def _split_into_pause_segments(text: str) -> list[tuple[str, int]]:
+    """Divide o texto em segmentos de fala, cada um com a pausa em ms que deve segui-lo; o último segmento recebe pausa zero."""
+    segmentos: list[tuple[str, int]] = []
+    paragrafos = [p for p in _PARAGRAPH_BREAK_RE.split(text) if p.strip()]
+
+    for indice, paragrafo in enumerate(paragrafos):
+        partes = _juntar_falsas_fronteiras(_PAUSE_MARK_RE.split(paragrafo.strip()))
+        for parte in partes:
+            parte = parte.strip()
+            if parte:
+                segmentos.append(
+                    (parte, PAUSE_MS_BY_MARK.get(parte[-1], DEFAULT_PAUSE_MS))
+                )
+        if segmentos and indice < len(paragrafos) - 1:
+            texto_final, _ = segmentos[-1]
+            segmentos[-1] = (texto_final, PARAGRAPH_PAUSE_MS)
+
+    if segmentos:
+        texto_final, _ = segmentos[-1]
+        segmentos[-1] = (texto_final, 0)
+    return segmentos
+
+
+def _juntar_falsas_fronteiras(partes: list[str]) -> list[str]:
+    """Recola os pedaços separados por um ponto de abreviação ('Dr. Silva'), que não é fim de oração."""
+    resultado: list[str] = []
+    for parte in partes:
+        if resultado and is_false_sentence_boundary(resultado[-1]):
+            resultado[-1] = f"{resultado[-1]} {parte}"
+        else:
+            resultado.append(parte)
+    return resultado
+
+
+def _silence(milliseconds: int) -> torch.Tensor:
+    """Devolve um tensor de silêncio com a duração pedida, na taxa de amostragem do Kokoro."""
+    return torch.zeros(int(milliseconds / 1000 * SAMPLE_RATE))
+
+
+def _trim_silence(audio: torch.Tensor) -> torch.Tensor:
+    """Apara o silêncio das bordas do segmento, preservando uma margem de guarda; áudio inteiramente silencioso volta intacto."""
+    flat = audio.flatten()
+    amplitude = flat.abs()
+    pico = float(amplitude.max())
+    if pico == 0.0:
+        return flat
+
+    acima = (amplitude > pico * TRIM_THRESHOLD).nonzero()
+    if acima.numel() == 0:
+        return flat
+
+    guarda = int(TRIM_GUARD_MS / 1000 * SAMPLE_RATE)
+    inicio = max(0, int(acima[0]) - guarda)
+    fim = min(flat.shape[-1], int(acima[-1]) + 1 + guarda)
+    return flat[inicio:fim]
 
 
 def _phoneme_count(text: str, g2p) -> int:
@@ -196,24 +296,43 @@ class KokoroSpeaker(Speaker):
         # en_tokenize do próprio engine. Para os demais, divide o texto por orçamento
         # de fonemas (medido com g2p) antes de sintetizar — cada pedaço gera áudio que
         # é concatenado num único AudioChunk (mesma granularidade de sempre).
-        if effective_lang_code in "ab":
-            pieces = [text]
-        else:
-            pieces = _split_by_phoneme_budget(text, pipeline.g2p)
+        # OS-045: o texto é dividido nos sinais de pontuação e cada segmento é
+        # sintetizado à parte, para que a pausa entre eles seja controlada aqui em vez
+        # de herdada do modelo — que colapsa vírgula, ponto e parágrafo em ~200 ms.
+        audio_parts: list[torch.Tensor] = []
+        for segmento, pausa_ms in _split_into_pause_segments(text):
+            # OS-034: idiomas via espeak (todos exceto en-us/en-gb) são truncados
+            # silenciosamente em 510 fonemas dentro do Kokoro; inglês é dividido pelo
+            # en_tokenize do próprio engine. Para os demais, divide o segmento por
+            # orçamento de fonemas (medido com g2p) antes de sintetizar.
+            if effective_lang_code in "ab":
+                pieces = [segmento]
+            else:
+                pieces = _split_by_phoneme_budget(segmento, pipeline.g2p)
 
-        audio_parts = [
-            result.output.audio
-            for piece in pieces
-            for result in pipeline(piece, voice=voice, speed=1.0)
-            if result.output is not None
-        ]
+            falado = [
+                result.output.audio
+                for piece in pieces
+                for result in pipeline(piece, voice=voice, speed=NARRATION_SPEED)
+                if result.output is not None
+            ]
+            if not falado:
+                continue
+
+            # Aparar antes de inserir é o que dá controle exato: cada segmento vem com
+            # ~208 ms de padding do modelo em cada borda, então concatenar sem aparar
+            # produziria um vão fixo de ~400 ms em toda pontuação — longo demais para
+            # vírgula e curto demais para ponto, exatamente o que se quer corrigir.
+            audio_parts.append(_trim_silence(torch.cat(falado, dim=-1)))
+            if pausa_ms:
+                audio_parts.append(_silence(pausa_ms))
 
         if not audio_parts:
             raise RuntimeError("Kokoro generated no audio")
 
         audio_tensor = torch.cat(audio_parts, dim=-1)
         audio_array = audio_tensor.numpy().flatten()
-        sample_rate = 24000
+        sample_rate = SAMPLE_RATE
 
         tmp_dir = tempfile.gettempdir()
         file_path = os.path.join(tmp_dir, f"kokoro_{hash(text)}.wav")
