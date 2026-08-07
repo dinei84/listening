@@ -2,6 +2,12 @@ import re
 
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+")
 
+# Linha em branco = troca de parágrafo. Preservada até o Speaker desde a OS-045:
+# o guia de ritmo trata fim de parágrafo como a maior pausa (1000-1200 ms), e
+# juntar tudo com espaço simples fazia essa pausa nunca existir.
+_PARAGRAPH_BREAK_RE = re.compile(r"\n\s*\n")
+PARAGRAPH_SEPARATOR = "\n\n"
+
 # Abreviações comuns em PT/EN: o ponto delas NÃO encerra sentença. Sem isso,
 # "Segundo o Dr. Silva..." podia virar dois AudioChunk, com pausa no meio do nome
 # (OS-035). Lista pequena e local de propósito — spaCy/NLTK seriam ~50MB e uma
@@ -49,6 +55,11 @@ _ABBREVIATIONS = {
 }
 
 
+def is_false_sentence_boundary(text_before: str) -> bool:
+    """True quando o ponto que encerra text_before é de abreviação ou inicial de nome, não de fim de frase."""
+    return _is_false_boundary(text_before)
+
+
 def _is_false_boundary(text_before: str) -> bool:
     """True quando o ponto que precede a fronteira faz parte de abreviação ou inicial de nome, não de fim de frase."""
     # Última "palavra" antes do ponto final do trecho.
@@ -74,6 +85,15 @@ def _split_sentences(text: str) -> list[str]:
     return [s for s in sentencas if s.strip()]
 
 
+def _split_paragraphs(text: str) -> list[list[str]]:
+    """Divide o texto em parágrafos e cada parágrafo em sentenças, descartando os vazios."""
+    paragrafos = [p for p in _PARAGRAPH_BREAK_RE.split(text) if p.strip()]
+    # Quebra de linha simples dentro do parágrafo é continuação da mesma frase (a
+    # junção de linhas quebradas do PDF é da OS-035); só a linha em branco separa
+    # parágrafo, que é a unidade que o guia de ritmo trata como troca de contexto.
+    return [_split_sentences(" ".join(p.split())) for p in paragrafos]
+
+
 # Revertido para 1000 na OS-019: o valor 480 da OS-018 foi calibrado em cima do limite
 # de 510 caracteres brutos da API do Kokoro mal usada (generate_from_tokens), não de um
 # limite de fonemas de verdade (decisão #14, docs/report/OS-018-report.md). Com a OS-019
@@ -92,15 +112,26 @@ def chunk_text(text: str, max_chars: int = DEFAULT_MAX_CHARS) -> list[str]:
     if not stripped:
         return []
 
-    sentences = _split_sentences(stripped)
+    # Cada sentença carrega o separador que a liga à anterior: espaço dentro do
+    # mesmo parágrafo, PARAGRAPH_SEPARATOR quando muda de parágrafo. O agrupamento
+    # em si não muda — a contagem de chunks continua idêntica, que é o que a
+    # checagem de consistência da retomada (OS-022) exige.
+    sentences: list[tuple[str, str]] = []
+    for paragrafo in _split_paragraphs(stripped):
+        for indice, sentence in enumerate(paragrafo):
+            primeira_do_paragrafo = indice == 0
+            separador = (
+                PARAGRAPH_SEPARATOR if primeira_do_paragrafo and sentences else " "
+            )
+            sentences.append((separador, sentence))
 
     chunks: list[str] = []
     current = ""
-    for sentence in sentences:
+    for separador, sentence in sentences:
         if not current:
             current = sentence
-        elif len(current) + 1 + len(sentence) <= max_chars:
-            current = f"{current} {sentence}"
+        elif len(current) + len(separador) + len(sentence) <= max_chars:
+            current = f"{current}{separador}{sentence}"
         else:
             chunks.append(current)
             current = sentence

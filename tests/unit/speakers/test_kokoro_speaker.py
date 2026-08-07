@@ -419,3 +419,107 @@ def test_phonetic_map_file_loads_real_entries():
     assert isinstance(mapa, dict)
     assert mapa, "o mapa inicial não pode estar vazio"
     assert "UML" in mapa
+
+
+# --- OS-045: ritmo e temporização ------------------------------------------
+
+
+def test_synthesize_uses_narration_speed(monkeypatch):
+    """178 WPM medidos no speed 1.0 fixo; o alvo do guia para texto simples é 140-160."""
+    factory = PipelineFactory()
+    monkeypatch.setattr(
+        KokoroSpeaker, "_build_pipeline", lambda self, lang: factory(lang)
+    )
+    KokoroSpeaker().synthesize(PT_TEXT, lang_code="p")
+    _, (_, _, speed) = factory.single_call()
+    assert speed == kokoro_speaker_module.NARRATION_SPEED
+
+
+def test_split_into_pause_segments_keeps_mark_with_preceding_text():
+    segmentos = kokoro_speaker_module._split_into_pause_segments(
+        "Primeiro item, segundo item. Terceira frase."
+    )
+    textos = [texto for texto, _ in segmentos]
+    assert textos == ["Primeiro item, segundo item.", "Terceira frase."]
+
+
+def test_split_into_pause_segments_never_splits_inside_a_sentence():
+    """Dividir na vírgula fazia o modelo tratar cada fragmento como frase completa:
+    contorno de fechamento no meio da oração, entonação achatada e emenda audível."""
+    frase = "O gato preto dormia, o cachorro corria; o galo cantava: era o quintal."
+    segmentos = kokoro_speaker_module._split_into_pause_segments(frase)
+    assert [texto for texto, _ in segmentos] == [frase]
+
+
+def test_split_into_pause_segments_uses_the_mark_to_pick_the_pause():
+    segmentos = kokoro_speaker_module._split_into_pause_segments(
+        "Primeira frase. Segunda frase! Terceira frase? Fim."
+    )
+    ponto, exclamacao, interrogacao, ultimo = [pausa for _, pausa in segmentos]
+    assert ponto == kokoro_speaker_module.PAUSE_MS_BY_MARK["."]
+    assert exclamacao == kokoro_speaker_module.PAUSE_MS_BY_MARK["!"]
+    assert interrogacao == kokoro_speaker_module.PAUSE_MS_BY_MARK["?"]
+    assert ultimo == 0, "o último segmento não é seguido de pausa"
+
+
+def test_split_into_pause_segments_detects_paragraph():
+    segmentos = kokoro_speaker_module._split_into_pause_segments(
+        "Fim do bloco.\n\nComeco do outro."
+    )
+    assert segmentos == [
+        ("Fim do bloco.", kokoro_speaker_module.PARAGRAPH_PAUSE_MS),
+        ("Comeco do outro.", 0),
+    ]
+
+
+def test_pause_hierarchy_separates_sentence_from_paragraph():
+    """O Kokoro sozinho dá ~203 ms no ponto e ~95 ms sem pontuação: sem hierarquia.
+    A separação entre frase e parágrafo é o que resta dela depois da escuta."""
+    marca = kokoro_speaker_module.PAUSE_MS_BY_MARK
+    assert marca["."] < kokoro_speaker_module.PARAGRAPH_PAUSE_MS
+    assert marca["."] > 203, "precisa superar a pausa que o modelo já dá sozinho"
+
+
+def test_intra_sentence_marks_have_no_configured_pause():
+    """Vírgula e afins são deixadas para o modelo — não podem voltar à tabela sem
+    reintroduzir a divisão dentro da frase."""
+    for marca in (",", ";", ":"):
+        assert marca not in kokoro_speaker_module.PAUSE_MS_BY_MARK
+        assert marca not in kokoro_speaker_module.SENTENCE_END_MARKS
+
+
+def test_pause_after_exclamation_is_longer_than_after_period():
+    """Paliativo por tempo: o modelo não tem ênfase, então a exclamação se destaca pela pausa."""
+    marca = kokoro_speaker_module.PAUSE_MS_BY_MARK
+    assert marca["!"] > marca["."]
+
+
+def test_split_into_pause_segments_does_not_split_on_abbreviation():
+    """'Dr.' sobrevive à OS-044 de propósito; não pode virar pausa de fim de frase."""
+    segmentos = kokoro_speaker_module._split_into_pause_segments(
+        "O Dr. Silva chegou. Depois saiu."
+    )
+    assert [texto for texto, _ in segmentos] == ["O Dr. Silva chegou.", "Depois saiu."]
+
+
+def test_silence_samples_match_configured_milliseconds():
+    silencio = kokoro_speaker_module._silence(500)
+    assert silencio.shape[-1] == int(0.5 * kokoro_speaker_module.SAMPLE_RATE)
+    assert float(silencio.abs().max()) == 0.0
+
+
+def test_trim_silence_removes_padding_but_keeps_guard_margin():
+    """Cada segmento traz ~208 ms de padding do modelo; sem aparar, todo vão vira 400 ms."""
+    guarda = int(
+        kokoro_speaker_module.TRIM_GUARD_MS / 1000 * kokoro_speaker_module.SAMPLE_RATE
+    )
+    fala = torch.ones(5000)
+    com_padding = torch.cat([torch.zeros(4000), fala, torch.zeros(4000)])
+    aparado = kokoro_speaker_module._trim_silence(com_padding)
+    assert aparado.shape[-1] == fala.shape[-1] + 2 * guarda
+
+
+def test_trim_silence_keeps_all_silent_audio_untouched():
+    """Segmento inteiramente silencioso não pode virar tensor vazio."""
+    mudo = torch.zeros(1000)
+    assert kokoro_speaker_module._trim_silence(mudo).shape[-1] == 1000
