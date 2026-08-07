@@ -433,7 +433,6 @@ def test_synthesize_uses_narration_speed(monkeypatch):
     KokoroSpeaker().synthesize(PT_TEXT, lang_code="p")
     _, (_, _, speed) = factory.single_call()
     assert speed == kokoro_speaker_module.NARRATION_SPEED
-    assert speed < 1.0
 
 
 def test_split_into_pause_segments_keeps_mark_with_preceding_text():
@@ -441,18 +440,25 @@ def test_split_into_pause_segments_keeps_mark_with_preceding_text():
         "Primeiro item, segundo item. Terceira frase."
     )
     textos = [texto for texto, _ in segmentos]
-    assert textos == ["Primeiro item,", "segundo item.", "Terceira frase."]
+    assert textos == ["Primeiro item, segundo item.", "Terceira frase."]
+
+
+def test_split_into_pause_segments_never_splits_inside_a_sentence():
+    """Dividir na vírgula fazia o modelo tratar cada fragmento como frase completa:
+    contorno de fechamento no meio da oração, entonação achatada e emenda audível."""
+    frase = "O gato preto dormia, o cachorro corria; o galo cantava: era o quintal."
+    segmentos = kokoro_speaker_module._split_into_pause_segments(frase)
+    assert [texto for texto, _ in segmentos] == [frase]
 
 
 def test_split_into_pause_segments_uses_the_mark_to_pick_the_pause():
     segmentos = kokoro_speaker_module._split_into_pause_segments(
-        "Um item, outro item; terceiro item. Fim."
+        "Primeira frase. Segunda frase! Terceira frase? Fim."
     )
-    pausas = [pausa for _, pausa in segmentos]
-    virgula, ponto_virgula, ponto, ultimo = pausas
-    assert virgula == kokoro_speaker_module.PAUSE_MS_BY_MARK[","]
-    assert ponto_virgula == kokoro_speaker_module.PAUSE_MS_BY_MARK[";"]
+    ponto, exclamacao, interrogacao, ultimo = [pausa for _, pausa in segmentos]
     assert ponto == kokoro_speaker_module.PAUSE_MS_BY_MARK["."]
+    assert exclamacao == kokoro_speaker_module.PAUSE_MS_BY_MARK["!"]
+    assert interrogacao == kokoro_speaker_module.PAUSE_MS_BY_MARK["?"]
     assert ultimo == 0, "o último segmento não é seguido de pausa"
 
 
@@ -466,16 +472,20 @@ def test_split_into_pause_segments_detects_paragraph():
     ]
 
 
-def test_pause_hierarchy_matches_the_guide():
-    """Hoje o Kokoro dá 169/195/203 ms para vírgula/ponto-e-vírgula/ponto — indistinguível."""
+def test_pause_hierarchy_separates_sentence_from_paragraph():
+    """O Kokoro sozinho dá ~203 ms no ponto e ~95 ms sem pontuação: sem hierarquia.
+    A separação entre frase e parágrafo é o que resta dela depois da escuta."""
     marca = kokoro_speaker_module.PAUSE_MS_BY_MARK
-    assert (
-        marca[","] < marca[";"] < marca["."] < kokoro_speaker_module.PARAGRAPH_PAUSE_MS
-    )
-    assert 200 <= marca[","] <= 300
-    assert 400 <= marca[";"] <= 500
-    assert 500 <= marca["."] <= 800
-    assert 1000 <= kokoro_speaker_module.PARAGRAPH_PAUSE_MS <= 1200
+    assert marca["."] < kokoro_speaker_module.PARAGRAPH_PAUSE_MS
+    assert marca["."] > 203, "precisa superar a pausa que o modelo já dá sozinho"
+
+
+def test_intra_sentence_marks_have_no_configured_pause():
+    """Vírgula e afins são deixadas para o modelo — não podem voltar à tabela sem
+    reintroduzir a divisão dentro da frase."""
+    for marca in (",", ";", ":"):
+        assert marca not in kokoro_speaker_module.PAUSE_MS_BY_MARK
+        assert marca not in kokoro_speaker_module.SENTENCE_END_MARKS
 
 
 def test_pause_after_exclamation_is_longer_than_after_period():

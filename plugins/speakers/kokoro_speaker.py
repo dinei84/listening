@@ -68,34 +68,36 @@ PHONETIC_MAP_PATH = Path(__file__).with_name("phonetic_map.yaml")
 
 SAMPLE_RATE = 24000
 
-# Velocidade da narração (OS-045). O speed=1.0 anterior media 178 WPM na voz
-# pf_dora — acima até da faixa de "notícias" do guia de ritmo.
-#
-# Calibrado com as pausas de PAUSE_MS_BY_MARK JÁ aplicadas, e essa ordem importa:
-# medida só na articulação, 0.80 dava os ~146 WPM alvo, mas o silêncio inserido
-# também conta no tempo total, e o mesmo 0.80 desabava para ~125 WPM. Em prosa
-# representativa (20,5 palavras/frase), 0.90 entrega 146,6 WPM — dentro dos
-# 140-160 do guia para leitura contínua. Quem quiser outro ritmo usa o controle
-# do player, que escala fala e pausa juntas (seção 3 do guia).
-NARRATION_SPEED = 0.90
+# Velocidade da narração. Mantida em 1.0 (articulação natural do modelo) por
+# avaliação de escuta: a 0.90 a voz perde tessitura e soa mecânica, e o ganho de
+# conforto vem da pausa entre frases, não de arrastar a articulação. O ritmo fino
+# fica com o controle de velocidade do player, que escala fala e pausa juntas.
+NARRATION_SPEED = 1.0
 
-# Pausa alvo por sinal, em ms (guia de ritmo, seção 1). O Kokoro sozinho produz
-# 169/195/203 ms para vírgula/ponto-e-vírgula/ponto — contra 95 ms sem pontuação
-# nenhuma, ou seja, praticamente não distingue os níveis. Sem esta tabela não há
-# hierarquia rítmica, e é ela que dá ao ouvinte o sinal de onde uma ideia acaba.
+# Pausa alvo por sinal, em ms. Só sinais de FIM DE FRASE entram aqui — ver
+# SENTENCE_END_MARKS para a razão. Os valores ficam abaixo dos 500-800 ms do guia
+# de ritmo de propósito: combinados com a pausa que o próprio modelo já produz
+# dentro da frase, os números do guia soaram arrastados na escuta real.
 PAUSE_MS_BY_MARK = {
-    ",": 250,
-    ";": 450,
-    ":": 450,
-    ".": 650,
+    ".": 420,
     # Acima do ponto final de propósito: o Kokoro-82M não tem controle de ênfase
     # (ressalva da decisão #23), então a exclamação só consegue se destacar pelo
     # tempo. É paliativo — dá relevo à frase, não emoção.
-    "!": 750,
-    "?": 650,
+    "!": 520,
+    "?": 470,
 }
-DEFAULT_PAUSE_MS = 250
-PARAGRAPH_PAUSE_MS = 1100
+
+# Só se divide o texto em fim de frase. Vírgula, ponto e vírgula e dois pontos
+# ficam DE FORA por medida de qualidade: cada segmento é sintetizado como um
+# enunciado independente, sem contexto do que vem antes ou depois, então dividir
+# dentro da frase faz o modelo aplicar contorno de frase completa (com queda
+# final) em cada fragmento. O resultado é entonação achatada e emenda audível —
+# regressão medida na escuta da primeira versão desta OS. A pausa interna de
+# vírgula que o modelo já produz sozinho (~169 ms) fica como está.
+SENTENCE_END_MARKS = ".!?"
+
+DEFAULT_PAUSE_MS = 420
+PARAGRAPH_PAUSE_MS = 800
 
 # Margem de segurança do aparo: o corte para no primeiro ponto acima do limiar,
 # e consoantes surdas (/s/, /f/, /p/) começam muito baixo — sem esta folga o
@@ -104,9 +106,9 @@ TRIM_GUARD_MS = 15
 TRIM_THRESHOLD = 0.02
 
 _PARAGRAPH_BREAK_RE = re.compile(r"\n\s*\n")
-# Divide DEPOIS do sinal, mantendo-o no segmento que ele encerra — a entonação da
-# vírgula pertence à oração que termina nela, não à seguinte.
-_PAUSE_MARK_RE = re.compile(r"(?<=[,;:.!?])\s+")
+# Divide DEPOIS do sinal, mantendo-o no segmento que ele encerra — a entonação de
+# fechamento pertence à frase que termina nele, não à seguinte.
+_PAUSE_MARK_RE = re.compile(rf"(?<=[{re.escape(SENTENCE_END_MARKS)}])\s+")
 
 
 @functools.lru_cache(maxsize=1)
