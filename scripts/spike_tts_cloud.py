@@ -497,17 +497,43 @@ def _chatterbox_model():
 _CHATTERBOX_MODEL = None
 
 
+# A amostra inteira (1.858 chars) numa chamada só estourou a VRAM de uma RTX 3060
+# (11,6 GiB): "CUDA out of memory", medido em 2026-08-07. O Chatterbox é desenhado
+# para enunciados curtos, e a memória de atenção cresce com o comprimento.
+#
+# Isso NÃO invalida o provedor: é o mesmo modo de falha que a OS-034 encontrou no
+# Kokoro (truncamento em 510 fonemas), e o pipeline de produção já divide o texto
+# antes de chamar o Speaker. Enviar 1.858 chars de uma vez é justamente o que
+# produção nunca faz. Aqui o spike divide igual, para a medição ser representativa.
+CHATTERBOX_MAX_CHARS = int(os.environ.get("CHATTERBOX_MAX_CHARS", "300"))
+
+
 def synthesize_chatterbox(text: str, exaggeration: float = 0.5) -> tuple[bytes, str]:
-    """Síntese local com Chatterbox Multilingual em pt-BR; devolve PCM16 como bytes."""
+    """Síntese local com Chatterbox Multilingual em pt; divide por sentença e concatena, devolvendo PCM16."""
+    import torch
+
+    from processing.chunker import chunk_text
+
     model = _chatterbox_model()
-    wav = model.generate(
-        text,
-        language_id=os.environ.get("CHATTERBOX_LANGUAGE", "pt"),
-        exaggeration=exaggeration,
-        cfg_weight=float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.5")),
-    )
-    pcm16 = (wav.detach().cpu().numpy().flatten() * 32767.0).astype("int16").tobytes()
-    return pcm16, f"sr={model.sr} exaggeration={exaggeration}"
+    partes = []
+    for pedaco in chunk_text(text, max_chars=CHATTERBOX_MAX_CHARS):
+        wav = model.generate(
+            pedaco,
+            language_id=os.environ.get("CHATTERBOX_LANGUAGE", "pt"),
+            exaggeration=exaggeration,
+            cfg_weight=float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.5")),
+        )
+        partes.append(wav.detach().cpu().numpy().flatten())
+        # A VRAM não é liberada sozinha entre gerações: sem isto, um livro inteiro
+        # acumula até estourar mesmo com os pedaços pequenos.
+        del wav
+        torch.cuda.empty_cache()
+
+    import numpy as np
+
+    audio = np.concatenate(partes)
+    pcm16 = (audio * 32767.0).astype("int16").tobytes()
+    return pcm16, f"sr={model.sr} exaggeration={exaggeration} pedacos={len(partes)}"
 
 
 def synthesize_chatterbox_expressive(text: str) -> tuple[bytes, str]:
