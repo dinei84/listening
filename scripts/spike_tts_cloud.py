@@ -76,6 +76,19 @@ SAMPLE_RATE = 24000
 AUDIO_OUTPUT_DIR = Path(os.environ.get("AUDIO_OUTPUT_DIR", "/tmp/os041-audio"))
 LATENCY_CALLS = int(os.environ.get("OS041_LATENCY_CALLS", "3"))
 
+# Filtro opcional de provedores: OS041_ONLY=chatterbox roda só esse e pula os
+# demais, inclusive o baseline Kokoro. Existe porque provedores locais podem
+# exigir dependências incompatíveis entre si — o Chatterbox puxa torch 2.6 e o
+# Kokoro do projeto roda em 2.13, então cada um vive no seu venv e o script é
+# chamado uma vez por ambiente.
+ONLY = {p.strip() for p in os.environ.get("OS041_ONLY", "").split(",") if p.strip()}
+
+
+def _should_run(key: str) -> bool:
+    """True quando o provedor deve rodar nesta execução (sem filtro, roda todos)."""
+    return not ONLY or key in ONLY
+
+
 # ---------------------------------------------------------------------------
 # Registro dos provedores: limites de caracteres por requisição conforme a
 # documentação oficial (levantado na seção de preços do relatório).
@@ -454,6 +467,87 @@ def synthesize_elevenlabs(text: str) -> tuple[bytes | None, str]:
     return audio, _b64(audio)[:64]
 
 
+# ------------------------------- Chatterbox ---------------------------------
+# Provedor LOCAL, como o Kokoro: custo zero por livro, sem credencial e sem rede
+# depois do download do modelo. Entra no spike (2026-08-07) porque é o único
+# candidato que tem controle de emoção — o parâmetro `exaggeration` — sem cobrar
+# por caractere. Se a qualidade em pt-BR se sustentar, cai a premissa de que
+# expressividade exige motor pago, que é o que sustenta o nível premium hoje.
+#
+# Vive em venv separado: puxa torch 2.6, e o venv do projeto roda 2.13 — instalar
+# junto rebaixaria o torch e quebraria o Kokoro. Daí o filtro OS041_ONLY.
+#     python3 -m venv venv-chatterbox && venv-chatterbox/bin/pip install chatterbox-tts
+#     OS041_ONLY=chatterbox venv-chatterbox/bin/python scripts/spike_tts_cloud.py
+
+
+def _chatterbox_model():
+    """Carrega o modelo multilíngue uma vez por processo (o download inicial é de alguns GB)."""
+    global _CHATTERBOX_MODEL
+    if _CHATTERBOX_MODEL is None:
+        import torch
+        from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+
+        device = os.environ.get(
+            "CHATTERBOX_DEVICE", "cuda" if torch.cuda.is_available() else "cpu"
+        )
+        _CHATTERBOX_MODEL = ChatterboxMultilingualTTS.from_pretrained(device=device)
+    return _CHATTERBOX_MODEL
+
+
+_CHATTERBOX_MODEL = None
+
+
+def synthesize_chatterbox(text: str, exaggeration: float = 0.5) -> tuple[bytes, str]:
+    """Síntese local com Chatterbox Multilingual em pt-BR; devolve PCM16 como bytes."""
+    model = _chatterbox_model()
+    wav = model.generate(
+        text,
+        language_id=os.environ.get("CHATTERBOX_LANGUAGE", "pt"),
+        exaggeration=exaggeration,
+        cfg_weight=float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.5")),
+    )
+    pcm16 = (wav.detach().cpu().numpy().flatten() * 32767.0).astype("int16").tobytes()
+    return pcm16, f"sr={model.sr} exaggeration={exaggeration}"
+
+
+def synthesize_chatterbox_expressive(text: str) -> tuple[bytes, str]:
+    """Mesma síntese com o exagero emocional alto — é a variável que o spike quer isolar."""
+    return synthesize_chatterbox(
+        text, exaggeration=float(os.environ.get("CHATTERBOX_EXAGGERATION", "1.2"))
+    )
+
+
+def _run_chatterbox(results: dict[str, dict]) -> None:
+    """Roda as duas variantes locais do Chatterbox (neutra e expressiva) e registra o resultado."""
+    for key, fn, label in (
+        ("chatterbox", synthesize_chatterbox, "Chatterbox Multilingual (neutro)"),
+        (
+            "chatterbox_expressive",
+            synthesize_chatterbox_expressive,
+            "Chatterbox Multilingual (exaggeration alto)",
+        ),
+    ):
+        latencies: list[float] = []
+        statuses: list[str] = []
+        for i in range(LATENCY_CALLS):
+            audio, elapsed, status = _latency_and_result(
+                lambda fn=fn: fn(SAMPLE_TEXT)[0]
+            )
+            latencies.append(elapsed)
+            statuses.append(status)
+            if i == 0:
+                _save(f"{key}_pt-BR", audio)
+        results[key] = {
+            "label": label,
+            "credential_status": "local, sem custo",
+            "audio_file": str(AUDIO_OUTPUT_DIR / f"{key}_pt-BR.wav"),
+            "latency_seconds": latencies,
+            "statuses": statuses,
+            "char_limit_per_request": None,
+        }
+        print(json.dumps({key: results[key]}, indent=2, ensure_ascii=False))
+
+
 # --------------------------------- Azure -----------------------------------
 
 
@@ -520,7 +614,18 @@ def main() -> None:
 
     results: dict[str, dict] = {}
 
-    # Kokoro — sempre roda, é a linha de base local sem custo.
+    # Kokoro — linha de base local sem custo; só é pulado sob filtro explícito.
+    if _should_run("kokoro"):
+        _run_kokoro(results)
+    if _should_run("chatterbox"):
+        _run_chatterbox(results)
+
+    _run_cloud_providers(results)
+    _print_cost_table()
+
+
+def _run_kokoro(results: dict[str, dict]) -> None:
+    """Roda a linha de base local e registra latência, status e arquivo de áudio."""
     latencies: list[float] = []
     statuses: list[str] = []
     for i in range(LATENCY_CALLS):
@@ -541,8 +646,13 @@ def main() -> None:
     }
     print(json.dumps({"kokoro": results["kokoro"]}, indent=2, ensure_ascii=False))
 
-    # Provedores cloud — só chamam se a credencial existir.
+
+def _run_cloud_providers(results: dict[str, dict]) -> None:
+    """Roda cada provedor cloud que tenha credencial e não esteja filtrado por OS041_ONLY."""
+
     for key in ("google", "polly", "openai", "elevenlabs", "azure", "azure_style"):
+        if not _should_run(key):
+            continue
         meta = PROVIDERS[key]
         fn = {
             "google": synthesize_google,
@@ -587,6 +697,9 @@ def main() -> None:
         }
         print(json.dumps({key: results[key]}, indent=2, ensure_ascii=False))
 
+
+def _print_cost_table() -> None:
+    """Imprime o custo estimado por livro do acervo, provedor a provedor."""
     print(
         "\n# custo estimado por livro (USD — preço oficial das fontes, levantado em 2026-08-06)"
     )
