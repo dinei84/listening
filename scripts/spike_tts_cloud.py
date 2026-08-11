@@ -103,6 +103,28 @@ SAMPLE_TEXT = (
     else SAMPLE_TEXT
 )
 
+
+def _texto_de_pdf(caminho: str, capitulo: int | None) -> str:
+    """Extrai o texto de um PDF real (opcionalmente de um capítulo só), já sanitizado como a síntese o receberia."""
+    from core import pipeline
+    from processing.sanitizer import sanitize_text
+
+    capitulos = pipeline.extract_chapters(caminho)
+    if capitulo is not None:
+        capitulos = [capitulos[capitulo]]
+    return sanitize_text("".join(c.text for c in capitulos))
+
+
+# OS041_PDF aponta para um PDF do acervo e OS041_CAPITULO escolhe um capítulo
+# (índice 0). Serve para medir o que interessa de verdade: um capítulo inteiro,
+# não uma amostra de laboratório — inclusive o custo real da chamada.
+_PDF = os.environ.get("OS041_PDF", "")
+if _PDF:
+    SAMPLE_TEXT = _texto_de_pdf(
+        _PDF,
+        int(os.environ["OS041_CAPITULO"]) if os.environ.get("OS041_CAPITULO") else None,
+    )
+
 # Dimensões reais do acervo (OS-041 seção 2), usadas para estimar custo por livro.
 BOOKS_CHARS = {
     "Arquitetura Limpa": 533_371,
@@ -510,6 +532,28 @@ def synthesize_openai(text: str) -> tuple[bytes | None, str]:
     return audio, _b64(audio)[:64]
 
 
+def _wav_frames(data: bytes) -> bytes:
+    """Extrai o PCM de dentro de um WAV, descartando o cabeçalho — necessário para concatenar respostas."""
+    import io
+
+    with wave.open(io.BytesIO(data), "rb") as wf:
+        return wf.readframes(wf.getnframes())
+
+
+def synthesize_openai_longo(text: str) -> tuple[bytes | None, str]:
+    """Sintetiza texto acima do limite de 4.096 chars da OpenAI, dividindo por frase e concatenando o PCM."""
+    from processing.chunker import chunk_text
+
+    limite = PROVIDERS["openai"]["char_limit_per_request"]
+    if len(text) <= limite:
+        return synthesize_openai(text)
+
+    # Concatenar WAVs inteiros empilharia cabeçalhos no meio do áudio; o certo é
+    # extrair o PCM de cada resposta e deixar o _save montar um contêiner só.
+    partes = [_wav_frames(synthesize_openai(p)[0]) for p in chunk_text(text, limite)]
+    return b"".join(partes), f"pedacos={len(partes)}"
+
+
 # ------------------------------- ElevenLabs --------------------------------
 
 
@@ -732,6 +776,22 @@ def main() -> None:
         or "nenhuma"
     )
 
+    # Prévia sem gastar: com OS041_DRY_RUN=1 o script mostra o que FARIA e sai.
+    # Existe porque um capítulo inteiro num motor pago é a primeira chamada deste
+    # spike com custo não-desprezível, e ver o valor antes é mais barato que depois.
+    if os.environ.get("OS041_DRY_RUN"):
+        chars = len(SAMPLE_TEXT)
+        print("\n# DRY RUN — nenhuma chamada será feita")
+        print(f"caracteres: {chars}")
+        for chave in sorted(ONLY) or ["(todos)"]:
+            print(f"provedor: {chave}")
+        # US$0,015 por 933 chars, medido no painel da OpenAI em 11/08/2026.
+        print(f"custo estimado OpenAI:  US$ {chars / 933 * 0.015:.2f}")
+        print(f"custo estimado Azure:   US$ {chars / 1_000_000 * 16:.2f}")
+        print(f"chamadas OpenAI (limite 4096 chars): {-(-chars // 4096)}")
+        print("Kokoro e Chatterbox: sem custo")
+        return
+
     results: dict[str, dict] = {}
 
     # Kokoro — linha de base local sem custo; só é pulado sob filtro explícito.
@@ -777,7 +837,7 @@ def _run_cloud_providers(results: dict[str, dict]) -> None:
         fn = {
             "google": synthesize_google,
             "polly": synthesize_polly,
-            "openai": synthesize_openai,
+            "openai": synthesize_openai_longo,
             "elevenlabs": synthesize_elevenlabs,
             "azure": synthesize_azure,
             "azure_style": synthesize_azure_style,
