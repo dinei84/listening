@@ -249,10 +249,20 @@ def _latency_and_result(fn) -> tuple[bytes | None, float, str]:
 
 
 def _save(name: str, audio: bytes | None) -> None:
+    """Grava o áudio do provedor como .wav, montando o contêiner só quando os bytes são PCM cru."""
     if audio is None:
         return
     AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    _write_wav(AUDIO_OUTPUT_DIR / f"{name}.wav", audio)
+    destino = AUDIO_OUTPUT_DIR / f"{name}.wav"
+    # Provedores divergem no que devolvem: Kokoro, Chatterbox e Azure (formato
+    # 'raw-') mandam PCM16 sem cabeçalho, enquanto ElevenLabs, OpenAI e Google
+    # (LINEAR16) já devolvem um WAV completo. Envelopar um WAV em outro WAV gera
+    # cabeçalho duplicado e arquivo corrompido, então a decisão é pelo conteúdo:
+    # 'RIFF' nos primeiros bytes significa contêiner pronto, é só gravar.
+    if audio[:4] == b"RIFF":
+        destino.write_bytes(audio)
+        return
+    _write_wav(destino, audio)
 
 
 # --------------------------- Kokoro (linha de base) -------------------------
@@ -726,7 +736,9 @@ def _run_cloud_providers(results: dict[str, dict]) -> None:
         latencies = []
         statuses = []
         for i in range(LATENCY_CALLS):
-            audio, elapsed, status = _latency_and_result(lambda fn=fn: fn(SAMPLE_TEXT))
+            audio, elapsed, status = _latency_and_result(
+                lambda fn=fn: fn(SAMPLE_TEXT)[0]
+            )
             latencies.append(elapsed)
             statuses.append(status)
             if i == 0:
