@@ -481,13 +481,18 @@ def synthesize_elevenlabs(text: str) -> tuple[bytes | None, str]:
             "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
         }
     ).encode()
+    # output_format na QUERY, não no header Accept: a ElevenLabs ignora o Accept e
+    # devolve MP3 por padrão. Como MP3 não começa com 'RIFF', o _save o tratava como
+    # PCM cru e envelopava num cabeçalho WAV — o player lia dado comprimido como
+    # amostra e saía estática, com duração falsa de 43s para um áudio de ~120s.
+    # pcm_24000 casa com SAMPLE_RATE e com o Kokoro, mantendo a comparação justa.
+    formato = os.environ.get("ELEVENLABS_OUTPUT_FORMAT", "pcm_24000")
     req = urllib.request.Request(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format={formato}",
         data=body,
         headers={
             "xi-api-key": api_key,
             "Content-Type": "application/json",
-            "Accept": "audio/wav",
         },
     )
     with urllib.request.urlopen(req) as resp:
