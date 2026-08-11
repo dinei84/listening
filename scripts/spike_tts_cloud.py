@@ -470,17 +470,33 @@ def synthesize_polly(text: str) -> tuple[bytes | None, str]:
 # -------------------------------- OpenAI -----------------------------------
 
 
+# A gpt-4o-mini-tts aceita `instructions`: uma descrição em linguagem natural de
+# COMO falar, separada do que falar. É o controle de estilo mais direto entre os
+# provedores testados — nem SSML nem parâmetro numérico, e não altera o texto
+# faturado do `input`. Para o nosso caso (entonação de ! e ?) é exatamente a
+# alavanca que falta no Kokoro. Vazio = sem instrução, para medir a linha de base.
+OPENAI_INSTRUCTIONS = os.environ.get(
+    "OPENAI_INSTRUCTIONS",
+    "Narre como um audiolivro em português do Brasil: ritmo pausado, dicção clara. "
+    "Faça a entonação subir nas perguntas e dê ênfase real nas exclamações.",
+)
+
+
 def synthesize_openai(text: str) -> tuple[bytes | None, str]:
-    """Chamada ao endpoint /v1/audio/speech da OpenAI."""
+    """Chamada ao endpoint /v1/audio/speech da OpenAI; `instructions` controla o estilo de narração."""
     api_key = os.environ["OPENAI_API_KEY"]
-    body = json.dumps(
-        {
-            "model": "gpt-4o-mini-tts",
-            "input": text,
-            "voice": "alloy",
-            "response_format": "wav",
-        }
-    ).encode()
+    payload = {
+        "model": os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
+        "input": text,
+        # A voz é configurável: as vozes variam bastante em como lidam com
+        # português, e 'alloy' era só o padrão histórico do spike.
+        "voice": os.environ.get("OPENAI_TTS_VOICE", "nova"),
+        # wav volta com cabeçalho RIFF, que o _save reconhece e grava direto.
+        "response_format": "wav",
+    }
+    if OPENAI_INSTRUCTIONS.strip():
+        payload["instructions"] = OPENAI_INSTRUCTIONS
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(
         "https://api.openai.com/v1/audio/speech",
         data=body,
