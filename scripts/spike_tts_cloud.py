@@ -109,8 +109,22 @@ def _texto_de_pdf(caminho: str, capitulo: int | None) -> str:
     from core import pipeline
     from processing.sanitizer import sanitize_text
 
+    if not Path(caminho).is_file():
+        raise SystemExit(
+            f"OS041_PDF: arquivo não encontrado — {caminho}\n"
+            "Aponte para um PDF que exista; o caminho da documentação é só um exemplo."
+        )
     capitulos = pipeline.extract_chapters(caminho)
     if capitulo is not None:
+        if not 0 <= capitulo < len(capitulos):
+            titulos = "\n".join(
+                f"  {i}: {(c.title or '(sem título)')[:60]}"
+                for i, c in enumerate(capitulos)
+            )
+            raise SystemExit(
+                f"OS041_CAPITULO={capitulo} fora do intervalo "
+                f"(o PDF tem {len(capitulos)} capítulos, índices 0 a {len(capitulos) - 1}):\n{titulos}"
+            )
         capitulos = [capitulos[capitulo]]
     return sanitize_text("".join(c.text for c in capitulos))
 
