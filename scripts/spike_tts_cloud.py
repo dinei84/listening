@@ -63,6 +63,46 @@ Uma arquitetura boa vem de compreendê-la mais como uma jornada do que como um d
 #   - Frase longa sem pontuação interna (o 4º parágrafo inteiro): estressa o
 #     respirar e a divisão em segmentos de cada engine.
 
+# ---------------------------------------------------------------------------
+# Amostra curta de EXPRESSIVIDADE (2026-08-11). A amostra da OS-041 é prosa
+# expositiva e não tem uma única interrogação ou exclamação — serve para medir
+# pronúncia, não entonação. Esta cobre os dois, e é ~metade do tamanho para
+# render mais execuções dentro da franquia gratuita da ElevenLabs.
+#
+# A original NÃO foi substituída: os números do relatório da OS-041 e as medições
+# de Kokoro e Chatterbox foram feitos sobre ela, e trocá-la invalidaria a
+# comparação já registrada. Escolha com OS041_SAMPLE=curta.
+SAMPLE_TEXT_EXPRESSIVA = """Você já parou para pensar em quanto do seu código sobrevive ao próximo ano?
+
+O software é formado por declarações if, atribuições e laços while, e assim permanece desde 1960. Programamos em Java, C# e Ruby, desenhamos diagramas em UML e consumimos a API interna do sistema. Mas será que isso mudou alguma coisa de verdade?
+
+Que descoberta incrível! O arquiteto experiente já sabia: o que custa caro é mudar depois, mesmo quando a infraestrutura sai por R$ 50 por mês.
+
+— E agora? — perguntou o estagiário, vendo o Docker subir pela primeira vez.
+
+— Agora você espera — respondeu o líder técnico, sem levantar os olhos.
+
+A regra que todo time precisa repetir todos os dias sem que ninguém precise lembrar cada detalhe de como ela deve ser executada e quando ela deve ser executada é sempre a mesma, e ela resiste porque foi construída sobre princípios e não sobre acaso.
+
+Incrível, não é? O bom design é uma jornada, nunca um destino."""
+
+# Casos de ENTONAÇÃO que a amostra da OS-041 não cobria:
+#   - Interrogativa sim/não ("Você já parou...?") — a curva deve SUBIR no fim.
+#   - Interrogativa longa ("Mas será que isso mudou alguma coisa de verdade?").
+#   - Interrogativa curta e seca ("E agora?").
+#   - Pergunta-eco ("Incrível, não é?") — sobe no "não é".
+#   - Exclamação ("Que descoberta incrível!") — o caso que o Kokoro não entrega.
+#   - Travessão de diálogo (—) com troca de turno entre duas falas.
+#   - Dois-pontos anunciando continuação.
+# Mantidos da amostra original: UML, API, design, Docker, C#, R$ 50, 1960 e a
+# frase longa sem vírgula. Fim reconhecível: "nunca um destino".
+
+SAMPLE_TEXT = (
+    SAMPLE_TEXT_EXPRESSIVA
+    if os.environ.get("OS041_SAMPLE", "").lower() in ("curta", "expressiva")
+    else SAMPLE_TEXT
+)
+
 # Dimensões reais do acervo (OS-041 seção 2), usadas para estimar custo por livro.
 BOOKS_CHARS = {
     "Arquitetura Limpa": 533_371,
