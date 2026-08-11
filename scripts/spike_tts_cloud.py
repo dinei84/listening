@@ -442,10 +442,28 @@ def synthesize_openai(text: str) -> tuple[bytes | None, str]:
 # ------------------------------- ElevenLabs --------------------------------
 
 
+def _elevenlabs_first_voice(api_key: str) -> str:
+    """Devolve o voice_id da primeira voz disponível NA CONTA; o catálogo varia por conta e por plano."""
+    req = urllib.request.Request(
+        "https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": api_key}
+    )
+    with urllib.request.urlopen(req) as resp:
+        vozes = json.loads(resp.read().decode()).get("voices", [])
+    if not vozes:
+        raise RuntimeError(
+            "a conta ElevenLabs não expõe nenhuma voz — verifique o plano"
+        )
+    return vozes[0]["voice_id"]
+
+
 def synthesize_elevenlabs(text: str) -> tuple[bytes | None, str]:
     """Chamada ao endpoint /v1/text-to-speech da ElevenLabs (voz pt-BR)."""
     api_key = os.environ["ELEVENLABS_API_KEY"]
-    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "ThT5KcBeYPX3keUQq8Ph")
+    # Sem ELEVENLABS_VOICE_ID, a voz é descoberta na conta. O padrão fixo anterior
+    # era um voice_id do catálogo público, escrito quando ninguém tinha credencial
+    # para testar: numa conta que não o enxerga, a API responde 404 — que parece
+    # erro de endpoint, e não "essa voz não existe para você".
+    voice_id = os.environ.get("ELEVENLABS_VOICE_ID") or _elevenlabs_first_voice(api_key)
     body = json.dumps(
         {
             "text": text,
