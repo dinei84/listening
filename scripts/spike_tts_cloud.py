@@ -110,7 +110,12 @@ BOOKS_CHARS = {
     "DDD Referência": 84_879,
 }
 
-KOKORO_VOICE = "af_heart"
+# pf_dora e não af_heart: o "af" é American Female. Com lang_code="p" a
+# fonemização sai correta em português, mas renderizada no timbre de uma voz
+# inglesa — o sotaque que isso produz foi percebido de ouvido em 11/08/2026.
+# O app usa VOICE_BY_LANG_CODE["p"] = "pf_dora", então a linha de base do spike
+# precisa usar a mesma voz para representar o que o produto realmente entrega.
+KOKORO_VOICE = os.environ.get("KOKORO_VOICE", "pf_dora")
 SAMPLE_RATE = 24000
 
 AUDIO_OUTPUT_DIR = Path(os.environ.get("AUDIO_OUTPUT_DIR", "/tmp/os041-audio"))
@@ -734,11 +739,11 @@ def _run_kokoro(results: dict[str, dict]) -> None:
         latencies.append(elapsed)
         statuses.append(status)
         if i == 0:
-            _save("kokoro_pt-BR_af_heart", audio)
+            _save(f"kokoro_pt-BR_{KOKORO_VOICE}", audio)
     results["kokoro"] = {
         "label": "Kokoro (baseline local)",
         "credential_status": "local, sem custo",
-        "audio_file": str(AUDIO_OUTPUT_DIR / "kokoro_pt-BR_af_heart.wav"),
+        "audio_file": str(AUDIO_OUTPUT_DIR / f"kokoro_pt-BR_{KOKORO_VOICE}.wav"),
         "latency_seconds": latencies,
         "statuses": statuses,
         "char_limit_per_request": None,
