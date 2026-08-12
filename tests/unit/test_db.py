@@ -1,6 +1,8 @@
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from core.models import Book
 from storage import db
 
@@ -162,3 +164,211 @@ def test_init_db_creates_heartbeat_table_on_existing_database(tmp_path):
 
     db.record_worker_heartbeat(db_path=caminho)
     assert db.worker_is_alive(db_path=caminho) is True
+
+
+# --- OS-052: migração de schema ---------------------------------------------
+
+
+def test_ensure_column_adds_missing_column_to_existing_table(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY)")
+    conn.commit()
+
+    db.ensure_column(conn, "teste", "nota", "nota TEXT")
+    conn.commit()
+
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(teste)")}
+    conn.close()
+    assert "nota" in colunas
+
+
+def test_ensure_column_is_idempotent(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY, nota TEXT)")
+    conn.commit()
+
+    db.ensure_column(conn, "teste", "nota", "nota TEXT")
+    db.ensure_column(conn, "teste", "nota", "nota TEXT")
+    conn.commit()
+
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(teste)")}
+    conn.close()
+    assert colunas == {"id", "nota"}
+
+
+def test_ensure_column_preserves_existing_rows(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY)")
+    conn.execute("INSERT INTO teste (id) VALUES ('a')")
+    conn.commit()
+
+    db.ensure_column(conn, "teste", "nota", "nota TEXT")
+    conn.commit()
+
+    linha = conn.execute("SELECT id, nota FROM teste WHERE id = 'a'").fetchone()
+    conn.close()
+    assert linha == ("a", None)
+
+
+def test_ensure_column_applies_default_to_old_rows(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY)")
+    conn.execute("INSERT INTO teste (id) VALUES ('a')")
+    conn.commit()
+
+    db.ensure_column(conn, "teste", "aprovado", "aprovado INTEGER NOT NULL DEFAULT 1")
+    conn.commit()
+
+    linha = conn.execute("SELECT id, aprovado FROM teste WHERE id = 'a'").fetchone()
+    conn.close()
+    assert linha == ("a", 1)
+
+
+def test_ensure_column_raises_on_invalid_ddl(tmp_path):
+    """DDL digitado errado precisa falhar alto, não virar migração silenciosa."""
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY)")
+    conn.commit()
+
+    with pytest.raises(sqlite3.OperationalError):
+        db.ensure_column(conn, "teste", "nota", "Isto não é uma definição de coluna")
+    conn.close()
+
+
+def test_ensure_column_refuses_not_null_without_default(tmp_path):
+    """Restrição do SQLite a respeitar: ADD COLUMN recusa NOT NULL sem DEFAULT — o erro sobe."""
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY)")
+    conn.commit()
+
+    with pytest.raises(sqlite3.OperationalError):
+        db.ensure_column(conn, "teste", "obrigatoria", "obrigatoria TEXT NOT NULL")
+    conn.close()
+
+
+def test_init_db_upgrades_legacy_books_table(tmp_path):
+    """Um books.db no formato da OS-017 ganha as colunas novas sem perder as linhas existentes."""
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("""
+        CREATE TABLE books (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """)
+    conn.execute(
+        "INSERT INTO books (id, title, original_filename, status, created_at) "
+        "VALUES ('legacy-1', 'Livro Antigo', 'antigo.pdf', 'ready', "
+        "'2026-01-01T12:00:00+00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    db.init_db(caminho)
+
+    livro = db.get_book("legacy-1", caminho)
+    assert livro is not None
+    assert livro.title == "Livro Antigo"
+    assert livro.error_message is None
+    assert livro.chunk_total is None
+    assert livro.language is None
+    assert livro.estimated_cost is None
+    assert livro.cost_confirmed is False
+    assert livro.cost_degraded is False
+    assert livro.normalize_text is False
+
+    conn = sqlite3.connect(caminho)
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(books)")}
+    conn.close()
+    assert {
+        "error_message",
+        "chunk_total",
+        "language",
+        "estimated_cost",
+        "cost_confirmed",
+        "cost_degraded",
+        "normalize_text",
+    } <= colunas
+
+
+def test_legacy_os017_books_db_opens_without_error(tmp_path):
+    """Um books.db no formato da OS-017 (sem error_message, sem priority) abre sem erro; as
+    cinco tabelas do projeto funcionam no mesmo arquivo depois da migração."""
+    from plugins.queues.sqlite_queue import SQLiteJobQueue
+    from storage import audio_store, progress_store
+
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("""
+        CREATE TABLE books (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """)
+    conn.execute("""
+        CREATE TABLE jobs (
+            id TEXT PRIMARY KEY,
+            book_id TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error_message TEXT
+        )
+        """)
+    conn.execute("""
+        CREATE TABLE audio_chunks (
+            book_id TEXT NOT NULL,
+            chapter_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            duration_seconds REAL NOT NULL,
+            engine_used TEXT NOT NULL,
+            PRIMARY KEY (book_id, sequence)
+        )
+        """)
+    conn.execute(
+        "INSERT INTO books (id, title, original_filename, status, created_at) "
+        "VALUES ('a', 'A', 'a.pdf', 'ready', '2026-01-01T12:00:00+00:00')"
+    )
+    conn.execute(
+        "INSERT INTO jobs (id, book_id, stage, status) "
+        "VALUES ('j1', 'a', 'extract', 'done')"
+    )
+    conn.commit()
+    conn.close()
+
+    db.init_db(caminho)
+    SQLiteJobQueue(caminho)
+    audio_store.init_db(caminho)
+    progress_store.init_db(caminho)
+
+    assert db.get_book("a", caminho) is not None
+    fila = SQLiteJobQueue(caminho)
+    assert fila.get_job("j1") is not None
+    assert audio_store.list_chunks("a", db_path=caminho) == []
+    assert progress_store.get_progress("a", db_path=caminho) is None
+
+    conn = sqlite3.connect(caminho)
+    colunas_books = {linha[1] for linha in conn.execute("PRAGMA table_info(books)")}
+    colunas_jobs = {linha[1] for linha in conn.execute("PRAGMA table_info(jobs)")}
+    tabelas = {
+        linha[0]
+        for linha in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    conn.close()
+    assert "error_message" in colunas_books
+    assert colunas_jobs >= {"error_message", "priority"}
+    assert {"worker_heartbeat", "reading_progress", "audio_chunks"} <= tabelas
