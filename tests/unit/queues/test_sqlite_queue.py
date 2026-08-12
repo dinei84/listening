@@ -1,3 +1,5 @@
+import sqlite3
+
 import pytest
 
 from core.models import Job
@@ -261,3 +263,36 @@ def test_sqlite_queue_get_job_for_book_returns_none_for_unknown_book(tmp_path):
     queue.enqueue(_job("job-1", book_id="book-a"))
 
     assert queue.get_job_for_book("book-unknown") is None
+
+
+def test_init_db_upgrades_legacy_jobs_table(tmp_path):
+    """Um banco no formato da OS-017 (jobs sem priority) ganha a coluna nova sem perder linhas."""
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("""
+        CREATE TABLE jobs (
+            id TEXT PRIMARY KEY,
+            book_id TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error_message TEXT
+        )
+        """)
+    conn.execute(
+        "INSERT INTO jobs (id, book_id, stage, status, error_message) "
+        "VALUES ('j1', 'book-a', 'extract', 'queued', NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+    queue = SQLiteJobQueue(caminho)
+
+    job = queue.get_job("j1")
+    assert job is not None
+    assert job.id == "j1"
+    assert job.priority == 0
+
+    conn = sqlite3.connect(caminho)
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(jobs)")}
+    conn.close()
+    assert colunas >= {"id", "book_id", "stage", "status", "error_message", "priority"}
