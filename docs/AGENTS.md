@@ -53,7 +53,7 @@ Uma OS só está "concluída" quando todos os itens acima estão marcados. Se al
 - Python: type hints obrigatórios, `black` para formatação, `ruff` para lint.
 - Nomes de arquivos e classes seguem exatamente o que está em `ARQUITETURA.md` seção 3 e 4 — não inventar nomes alternativos.
 - Commits pequenos e descritivos: `test: adiciona testes para PyMuPDFExtractor`, `feat: implementa PyMuPDFExtractor`.
-- Nenhum plugin importa outro plugin diretamente — comunicação sempre via `core/pipeline.py` e `plugins/registry.py`.
+- Nenhum plugin importa outro plugin diretamente — comunicação sempre via `core/pipeline.py` e `plugins/registry.py`. **Um plugin pode importar `core.models` e `processing`** (camadas puras, sem I/O nem estado); **não pode** importar `api` nem `worker`. `plugins` → `storage` é permitido **com ressalva** — ver decisão #24 em `PROJECT_STATE.md` antes de criar uma aresta nova dessas.
 
 ## 6. O que reportar quando algo trava
 
