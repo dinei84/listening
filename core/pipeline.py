@@ -294,6 +294,7 @@ def _synthesize_with_retry(
     speaker,
     text: str,
     lang_code: str | None,
+    voice: str | None,
     max_attempts: int,
     base_delay: float,
     max_delay: float,
@@ -301,7 +302,7 @@ def _synthesize_with_retry(
     """Chama speaker.synthesize repetindo falha transitória com backoff exponencial (base × 2^(n-1), teto em max_delay); falha permanente não é retentada e sobe de imediato."""
     for attempt in range(1, max_attempts + 1):
         try:
-            return speaker.synthesize(text, lang_code=lang_code)
+            return speaker.synthesize(text, voice=voice, lang_code=lang_code)
         except TransientSpeakerError:
             if attempt >= max_attempts:
                 raise
@@ -320,8 +321,9 @@ def synthesize_text(
     sequence_offset: int = 0,
     speaker_name: str | None = None,
     normalize: bool = False,
+    voice: str | None = None,
 ) -> list[AudioChunk]:
-    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos e speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local). Falhas transitórias (TransientSpeakerError) são retentadas com backoff conforme a config retry (OS-043). O texto passa pela sanitização (OS-040) antes de virar chunk, e por normalize=True cada chunk ainda passa pelo TextNormalizer configurado (OS-038; padrão False = NoOp, sem rede e sem custo)."""
+    """Divide o texto em chunks e sintetiza cada um com o Speaker configurado; se on_chunk for passado é chamado com cada AudioChunk assim que ele fica pronto, antes de sintetizar o próximo, as sequences em skip_sequences não são sintetizadas nem aparecem na lista devolvida, lang_code força o idioma do engine em todos os chunks (None = detecção automática), sequence_offset desloca a numeração para manter a sequence global e contínua entre capítulos, speaker_name sobrescreve o Speaker usado nesta chamada (None = o configurado; usado pela trava de custo ao degradar para a voz local) e voice é repassada ao Speaker em cada chunk (None = o padrão do idioma). Falhas transitórias (TransientSpeakerError) são retentadas com backoff conforme a config retry (OS-043). O texto passa pela sanitização (OS-040) antes de virar chunk, e por normalize=True cada chunk ainda passa pelo TextNormalizer configurado (OS-038; padrão False = NoOp, sem rede e sem custo)."""
     text = sanitize_text(text)
     chunks = chunk_text(text) if max_chars is None else chunk_text(text, max_chars)
     already_done = skip_sequences or set()
@@ -358,6 +360,7 @@ def synthesize_text(
                 speaker,
                 sub,
                 lang_code,
+                voice,
                 cfg.retry_max_attempts,
                 cfg.retry_base_delay_seconds,
                 cfg.retry_max_delay_seconds,

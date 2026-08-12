@@ -49,6 +49,10 @@ class Book(BaseModel):
     error_message: str | None = None
     chunk_total: int | None = None
     language: str | None = None
+    # Voz escolhida no envio (OS-053); None = voz padrão do idioma. Se o idioma
+    # for Automático, é forçada a None (não dá para validar voz contra idioma
+    # desconhecido, e voz de um idioma lendo outro é erro de produto).
+    voice: str | None = None
     # Trava de custo (OS-042): estimativa persistida, flag de confirmação explícita
     # e flag de degradação para voz local quando a estimativa estoura o teto.
     estimated_cost: float | None = None

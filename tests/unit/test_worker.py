@@ -109,6 +109,7 @@ class RecordingSpeaker(Speaker):
         self.statuses_at_call = []
         self.chunk_total_at_call = []
         self.lang_codes = []
+        self.voices = []
 
     @property
     def cost_per_char(self):
@@ -122,6 +123,7 @@ class RecordingSpeaker(Speaker):
         self.statuses_at_call.append(fetched.status)
         self.chunk_total_at_call.append(fetched.chunk_total)
         self.lang_codes.append(lang_code)
+        self.voices.append(voice)
         fd, path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as f:
             f.write(b"RIFF-fake-wav-bytes")
@@ -220,7 +222,7 @@ def _persist_previous_chunk(book_id, sequence):
     )
 
 
-def _create_book_and_pdf(upload_dir, book_id="book-1", language=None):
+def _create_book_and_pdf(upload_dir, book_id="book-1", language=None, voice=None):
     upload_dir.mkdir(parents=True, exist_ok=True)
     uploads_module.pdf_path_for(book_id).write_bytes(b"%PDF-1.4 fake content")
     db_module.init_db()
@@ -231,6 +233,7 @@ def _create_book_and_pdf(upload_dir, book_id="book-1", language=None):
         status="uploaded",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
         language=language,
+        voice=voice,
     )
     db_module.create_book(book)
     return book
@@ -462,6 +465,24 @@ def test_worker_process_job_passes_none_lang_code_without_book_language(
     worker_tasks.process_job(job)
 
     assert speaker.lang_codes == [None, None, None]
+    assert db_module.get_book(book.id).status == "ready"
+
+
+def test_worker_passes_book_voice_to_pipeline(temp_paths, monkeypatch):
+    book = _create_book_and_pdf(temp_paths, language="pt", voice="pm_alex")
+    speaker = RecordingSpeaker(book.id)
+    monkeypatch.setattr(config_module, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": MultiChunkExtractor}
+    )
+    monkeypatch.setattr(registry_module, "SPEAKERS", {"fake_speaker": lambda: speaker})
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+
+    worker_tasks.process_job(job)
+
+    assert speaker.voices == ["pm_alex", "pm_alex", "pm_alex"]
     assert db_module.get_book(book.id).status == "ready"
 
 

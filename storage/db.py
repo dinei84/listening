@@ -41,6 +41,7 @@ def init_db(db_path: str | None = None) -> None:
                 error_message TEXT,
                 chunk_total INTEGER,
                 language TEXT,
+                voice TEXT,
                 estimated_cost REAL,
                 cost_confirmed INTEGER NOT NULL DEFAULT 0,
                 cost_degraded INTEGER NOT NULL DEFAULT 0,
@@ -55,6 +56,7 @@ def init_db(db_path: str | None = None) -> None:
         ensure_column(conn, "books", "error_message", "error_message TEXT")
         ensure_column(conn, "books", "chunk_total", "chunk_total INTEGER")
         ensure_column(conn, "books", "language", "language TEXT")
+        ensure_column(conn, "books", "voice", "voice TEXT")
         ensure_column(
             conn,
             "books",
@@ -147,8 +149,8 @@ def create_book(book: Book, db_path: str | None = None) -> None:
     try:
         conn.execute(
             "INSERT INTO books "
-            "(id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded, normalize_text) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 book.id,
                 book.title,
@@ -158,6 +160,7 @@ def create_book(book: Book, db_path: str | None = None) -> None:
                 book.error_message,
                 book.chunk_total,
                 book.language,
+                book.voice,
                 book.estimated_cost,
                 int(book.cost_confirmed),
                 int(book.cost_degraded),
@@ -174,7 +177,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -193,10 +196,11 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         error_message=row[5],
         chunk_total=row[6],
         language=row[7],
-        estimated_cost=row[8],
-        cost_confirmed=bool(row[9]),
-        cost_degraded=bool(row[10]),
-        normalize_text=bool(row[11]),
+        voice=row[8],
+        estimated_cost=row[9],
+        cost_confirmed=bool(row[10]),
+        cost_degraded=bool(row[11]),
+        normalize_text=bool(row[12]),
     )
 
 
@@ -205,7 +209,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -221,10 +225,11 @@ def list_books(db_path: str | None = None) -> list[Book]:
             error_message=row[5],
             chunk_total=row[6],
             language=row[7],
-            estimated_cost=row[8],
-            cost_confirmed=bool(row[9]),
-            cost_degraded=bool(row[10]),
-            normalize_text=bool(row[11]),
+            voice=row[8],
+            estimated_cost=row[9],
+            cost_confirmed=bool(row[10]),
+            cost_degraded=bool(row[11]),
+            normalize_text=bool(row[12]),
         )
         for row in rows
     ]

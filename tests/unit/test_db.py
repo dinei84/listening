@@ -371,3 +371,84 @@ def test_legacy_os017_books_db_opens_without_error(tmp_path):
     assert "error_message" in colunas_books
     assert colunas_jobs >= {"error_message", "priority"}
     assert {"worker_heartbeat", "reading_progress", "audio_chunks"} <= tabelas
+
+
+# --- OS-053: escolha de voz --------------------------------------------------
+
+
+def test_book_voice_persists_and_loads(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    db.init_db(caminho)
+    livro = Book(
+        id="book-voz",
+        title="Livro com voz",
+        original_filename="voz.pdf",
+        status="uploaded",
+        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+        language="pt",
+        voice="pm_alex",
+    )
+
+    db.create_book(livro, caminho)
+    carregado = db.get_book(livro.id, caminho)
+
+    assert carregado is not None
+    assert carregado.voice == "pm_alex"
+
+
+def test_book_voice_defaults_to_none(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    db.init_db(caminho)
+    livro = Book(
+        id="book-sem-voz",
+        title="Sem voz",
+        original_filename="sem.pdf",
+        status="uploaded",
+        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+    )
+
+    db.create_book(livro, caminho)
+    carregado = db.get_book(livro.id, caminho)
+
+    assert carregado is not None
+    assert carregado.voice is None
+
+
+def test_init_db_adds_voice_column_to_legacy_books_table(tmp_path):
+    """Um books.db sem a coluna voice (formato da OS-052) ganha a coluna sem perder linhas."""
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("""
+        CREATE TABLE books (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            error_message TEXT,
+            chunk_total INTEGER,
+            language TEXT,
+            estimated_cost REAL,
+            cost_confirmed INTEGER NOT NULL DEFAULT 0,
+            cost_degraded INTEGER NOT NULL DEFAULT 0,
+            normalize_text INTEGER NOT NULL DEFAULT 0
+        )
+        """)
+    conn.execute(
+        "INSERT INTO books (id, title, original_filename, status, created_at, language) "
+        "VALUES ('a', 'A', 'a.pdf', 'ready', '2026-01-01T12:00:00+00:00', 'pt')"
+    )
+    conn.commit()
+    conn.close()
+
+    db.init_db(caminho)
+
+    livro = db.get_book("a", caminho)
+    assert livro is not None
+    assert livro.voice is None
+    assert livro.language == "pt"
+
+    conn = sqlite3.connect(caminho)
+    colunas = {linha[1] for linha in conn.execute("PRAGMA table_info(books)")}
+    conn.close()
+    assert "voice" in colunas

@@ -125,3 +125,18 @@ def test_player_has_worker_warning_element(tmp_path, monkeypatch):
 
     assert 'id="worker-warning"' in html
     assert "/worker" in js
+
+
+def test_player_has_voice_select(tmp_path, monkeypatch):
+    """OS-053: o seletor de voz precisa existir no formulário de envio."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        html = client.get("/").text
+        js = client.get("/app.js").text
+
+    assert 'id="voice-select"' in html
+    assert "voice-select" in js
+    assert "VOICES_BY_LANGUAGE" in js

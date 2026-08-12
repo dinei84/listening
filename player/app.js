@@ -6,9 +6,87 @@ const WAITING_MESSAGE = "Aguardando próximo trecho...";
 // podcast); abaixo disso, volta para o trecho anterior (OS-039).
 const PREV_RESTART_THRESHOLD_S = 3;
 
+// Vozes selecionáveis por idioma (OS-053), espelhando o catálogo do
+// KokoroSpeaker. Chave é o valor do seletor de idioma (Automático não entra:
+// voz fica desabilitada). Cada lista começa pela voz padrão do idioma — quem
+// não escolhe recebe exatamente o comportamento de hoje.
+const VOICES_BY_LANGUAGE = {
+  en: [
+    "af_heart",
+    "af_alloy",
+    "af_aoede",
+    "af_bella",
+    "af_jessica",
+    "af_kore",
+    "af_nicole",
+    "af_nova",
+    "af_river",
+    "af_sarah",
+    "af_sky",
+    "am_adam",
+    "am_echo",
+    "am_eric",
+    "am_fenrir",
+    "am_liam",
+    "am_michael",
+    "am_onyx",
+    "am_puck",
+    "am_santa",
+  ],
+  es: ["ef_dora", "em_alex", "em_santa"],
+  fr: ["ff_siwis"],
+  hi: ["hf_alpha", "hf_beta", "hm_omega", "hm_psi"],
+  it: ["if_sara", "im_nicola"],
+  pt: ["pf_dora", "pm_alex", "pm_santa"],
+  ja: ["jf_alpha", "jf_gongitsune", "jf_nezumi", "jf_tebukuro", "jm_kumo"],
+  "zh-cn": [
+    "zf_xiaoxiao",
+    "zf_xiaobei",
+    "zf_xiaoni",
+    "zf_xiaoyi",
+    "zm_yunjian",
+    "zm_yunxi",
+    "zm_yunxia",
+    "zm_yunyang",
+  ],
+  "zh-tw": [
+    "zf_xiaoxiao",
+    "zf_xiaobei",
+    "zf_xiaoni",
+    "zf_xiaoyi",
+    "zm_yunjian",
+    "zm_yunxi",
+    "zm_yunxia",
+    "zm_yunyang",
+  ],
+};
+
+// Preenche o seletor de voz com as vozes do idioma escolhido. Com idioma
+// Automático o seletor fica desabilitado e vazio: não há como validar a voz
+// contra um idioma que só será conhecido depois da detecção (OS-053).
+function populateVoiceSelect() {
+  const voices = VOICES_BY_LANGUAGE[languageSelect.value];
+  voiceSelect.innerHTML = "";
+  const padrao = document.createElement("option");
+  padrao.value = "";
+  padrao.textContent = "Padrão do idioma";
+  voiceSelect.appendChild(padrao);
+  if (voices) {
+    for (const voice of voices) {
+      const option = document.createElement("option");
+      option.value = voice;
+      option.textContent = voice;
+      voiceSelect.appendChild(option);
+    }
+  }
+  voiceSelect.disabled = !voices;
+}
+
 const uploadForm = document.getElementById("upload-form");
 const pdfInput = document.getElementById("pdf-input");
 const uploadStatus = document.getElementById("upload-status");
+const languageSelect = document.getElementById("language-select");
+const voiceSelect = document.getElementById("voice-select");
 const manualForm = document.getElementById("manual-form");
 const bookIdInput = document.getElementById("book-id-input");
 const refreshBooksBtn = document.getElementById("refresh-books-btn");
@@ -223,6 +301,12 @@ async function uploadBook(file) {
   const language = document.getElementById("language-select").value;
   if (language) {
     formData.append("language", language);
+  }
+  // Voz (OS-053): só é enviada quando um idioma foi escolhido e uma voz
+  // específica selecionada — com idioma Automático o seletor fica desabilitado.
+  const voice = voiceSelect.value;
+  if (voice) {
+    formData.append("voice", voice);
   }
   // Opt-in do nível médio (OS-038): só é enviado quando marcado, para que o
   // caminho padrão continue sem normalização, sem rede e sem custo.
@@ -782,6 +866,8 @@ speedSelect.addEventListener("change", () => {
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
 });
 
+languageSelect.addEventListener("change", populateVoiceSelect);
+
 // Atalhos de teclado (OS-039): ← anterior, → próximo, espaço play/pause.
 // Não capturar quando o foco está num campo de texto (input/select/textarea),
 // senão quebra a digitação (ex: campo "Abrir livro existente").
@@ -843,6 +929,7 @@ restartBtn.addEventListener("click", () => {
 });
 
 (function init() {
+  populateVoiceSelect();
   refreshBooksList();
   const saved = loadSavedState();
   if (saved && saved.bookId) {
