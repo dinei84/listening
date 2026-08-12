@@ -2,6 +2,7 @@ import sqlite3
 
 from core.models import Job
 from plugins.queues.base import JobQueue
+from storage.db import ensure_column
 
 DEFAULT_DB_PATH = "books.db"
 
@@ -27,6 +28,11 @@ class SQLiteJobQueue(JobQueue):
                     priority INTEGER NOT NULL DEFAULT 0
                 )
                 """)
+            # Migração de schema (OS-052): coluna adicionada depois da versão
+            # original da tabela (OS-032). O DEFAULT preenche as linhas antigas.
+            ensure_column(
+                conn, "jobs", "priority", "priority INTEGER NOT NULL DEFAULT 0"
+            )
             conn.commit()
         finally:
             conn.close()

@@ -236,15 +236,16 @@ def test_ensure_column_raises_on_invalid_ddl(tmp_path):
     conn.commit()
 
     with pytest.raises(sqlite3.OperationalError):
-        db.ensure_column(conn, "teste", "nota", "Isto não é uma definição de coluna")
+        db.ensure_column(conn, "teste", "nota", "nota (mal formado")
     conn.close()
 
 
 def test_ensure_column_refuses_not_null_without_default(tmp_path):
-    """Restrição do SQLite a respeitar: ADD COLUMN recusa NOT NULL sem DEFAULT — o erro sobe."""
+    """Restrição do SQLite a respeitar: ADD COLUMN recusa NOT NULL sem DEFAULT (com linhas) — o erro sobe."""
     caminho = str(tmp_path / "t.db")
     conn = sqlite3.connect(caminho)
     conn.execute("CREATE TABLE teste (id TEXT PRIMARY KEY)")
+    conn.execute("INSERT INTO teste (id) VALUES ('a')")
     conn.commit()
 
     with pytest.raises(sqlite3.OperationalError):
@@ -364,9 +365,7 @@ def test_legacy_os017_books_db_opens_without_error(tmp_path):
     colunas_jobs = {linha[1] for linha in conn.execute("PRAGMA table_info(jobs)")}
     tabelas = {
         linha[0]
-        for linha in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
+        for linha in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     }
     conn.close()
     assert "error_message" in colunas_books

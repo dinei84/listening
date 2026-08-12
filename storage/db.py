@@ -20,6 +20,13 @@ def _resolve_path(db_path: str | None) -> str:
     return db_path if db_path is not None else DEFAULT_DB_PATH
 
 
+def ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    """Adiciona uma coluna a uma tabela existente se ela não existir (idempotente)."""
+    colunas = {linha[1] for linha in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in colunas:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
 def init_db(db_path: str | None = None) -> None:
     """Cria a tabela `books` no banco (idempotente), no caminho informado ou no padrão do projeto."""
     conn = sqlite3.connect(_resolve_path(db_path))
@@ -40,6 +47,33 @@ def init_db(db_path: str | None = None) -> None:
                 normalize_text INTEGER NOT NULL DEFAULT 0
             )
             """)
+        # Migração de schema (OS-052): `CREATE TABLE IF NOT EXISTS` cria tabela
+        # ausente mas nunca adiciona coluna. Cada coluna acrescentada depois da
+        # versão original da tabela entra aqui — antes, isso quebrava o books.db
+        # local nas OS-018, OS-032 e OS-042. O `DEFAULT` declarado preenche as
+        # linhas antigas; `NOT NULL` sem `DEFAULT` falha de propósito (SQLite).
+        ensure_column(conn, "books", "error_message", "error_message TEXT")
+        ensure_column(conn, "books", "chunk_total", "chunk_total INTEGER")
+        ensure_column(conn, "books", "language", "language TEXT")
+        ensure_column(
+            conn,
+            "books",
+            "normalize_text",
+            "normalize_text INTEGER NOT NULL DEFAULT 0",
+        )
+        ensure_column(conn, "books", "estimated_cost", "estimated_cost REAL")
+        ensure_column(
+            conn,
+            "books",
+            "cost_confirmed",
+            "cost_confirmed INTEGER NOT NULL DEFAULT 0",
+        )
+        ensure_column(
+            conn,
+            "books",
+            "cost_degraded",
+            "cost_degraded INTEGER NOT NULL DEFAULT 0",
+        )
         # `order` é palavra reservada no SQL, daí a coluna se chamar chapter_order.
         # O texto do capítulo NÃO é persistido: seria o livro inteiro duplicado no
         # banco, e nenhum consumidor precisa dele (OS-027).
@@ -55,10 +89,9 @@ def init_db(db_path: str | None = None) -> None:
             )
             """)
         # Tabela NOVA, nunca coluna nova numa tabela existente (OS-051): o projeto
-        # não tem migração de schema, e `CREATE TABLE IF NOT EXISTS` cria tabela
-        # ausente mas nunca adiciona coluna. Adicionar coluna já quebrou o
-        # books.db local nas OS-018, OS-032 e OS-042, sempre com erro obscuro do
-        # SQLite. Como tabela, o heartbeat aparece sozinho em banco antigo.
+        # não tinha migração de schema antes da OS-052, e `CREATE TABLE IF NOT
+        # EXISTS` cria tabela ausente mas nunca adiciona coluna. Como tabela, o
+        # heartbeat aparece sozinho em banco antigo.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS worker_heartbeat (
                 id INTEGER PRIMARY KEY,
