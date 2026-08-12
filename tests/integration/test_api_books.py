@@ -878,3 +878,26 @@ def test_confirm_endpoint_returns_409_for_book_not_waiting(
         response = client.post(f"/books/{book_id}/confirm")
 
     assert response.status_code == 409
+
+
+# --- OS-051: estado do worker exposto pela API -----------------------------
+
+
+def test_api_reports_worker_stopped_when_no_heartbeat(temp_paths):
+    with TestClient(app) as client:
+        response = client.get("/worker")
+
+    assert response.status_code == 200
+    assert response.json()["alive"] is False
+
+
+def test_api_reports_worker_alive_after_heartbeat(temp_paths):
+    from storage import db as db_module
+
+    with TestClient(app) as client:
+        db_module.record_worker_heartbeat()
+        response = client.get("/worker")
+
+    body = response.json()
+    assert body["alive"] is True
+    assert body["last_heartbeat_at"] is not None

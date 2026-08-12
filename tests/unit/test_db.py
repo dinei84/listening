@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from core.models import Book
 from storage import db
@@ -106,3 +106,57 @@ def test_list_books_returns_books_ordered_by_created_at_desc(tmp_path):
     books = db.list_books(db_path)
 
     assert [book.id for book in books] == ["book-newer", "book-older"]
+
+
+# --- OS-051: sinal de worker ativo -----------------------------------------
+
+
+def test_heartbeat_absent_reports_worker_stopped(tmp_path):
+    """Banco sem batimento é worker parado, nunca erro — é o estado de quem nunca subiu o worker."""
+    caminho = str(tmp_path / "t.db")
+    db.init_db(caminho)
+    assert db.worker_is_alive(db_path=caminho) is False
+    assert db.last_worker_heartbeat(db_path=caminho) is None
+
+
+def test_heartbeat_recent_reports_worker_alive(tmp_path):
+    caminho = str(tmp_path / "t.db")
+    db.init_db(caminho)
+    db.record_worker_heartbeat(db_path=caminho)
+    assert db.worker_is_alive(db_path=caminho) is True
+    assert db.last_worker_heartbeat(db_path=caminho) is not None
+
+
+def test_heartbeat_older_than_threshold_reports_worker_stopped(tmp_path):
+    """O limiar precisa acomodar o chunk mais lento; acima dele, o worker é dado como parado."""
+    caminho = str(tmp_path / "t.db")
+    db.init_db(caminho)
+    antigo = datetime.now(UTC) - timedelta(seconds=db.WORKER_HEARTBEAT_TIMEOUT_SECONDS + 5)
+    db.record_worker_heartbeat(moment=antigo, db_path=caminho)
+    assert db.worker_is_alive(db_path=caminho) is False
+
+
+def test_heartbeat_keeps_a_single_row(tmp_path):
+    """Decisão #11: um worker por vez, então o batimento é sobrescrito, não acumulado."""
+    caminho = str(tmp_path / "t.db")
+    db.init_db(caminho)
+    for _ in range(3):
+        db.record_worker_heartbeat(db_path=caminho)
+    conn = sqlite3.connect(caminho)
+    total = conn.execute("SELECT COUNT(*) FROM worker_heartbeat").fetchone()[0]
+    conn.close()
+    assert total == 1
+
+
+def test_init_db_creates_heartbeat_table_on_existing_database(tmp_path):
+    """O projeto não tem migração de schema: tabela NOVA é criada sem exigir apagar o books.db."""
+    caminho = str(tmp_path / "t.db")
+    conn = sqlite3.connect(caminho)
+    conn.execute("CREATE TABLE books (id TEXT PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+
+    db.init_db(caminho)
+
+    db.record_worker_heartbeat(db_path=caminho)
+    assert db.worker_is_alive(db_path=caminho) is True
