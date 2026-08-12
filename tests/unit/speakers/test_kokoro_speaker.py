@@ -100,6 +100,30 @@ def test_kokoro_speaker_cost_per_char_is_zero():
     assert speaker.cost_per_char == 0.0
 
 
+# --- OS-053: catálogo de vozes selecionáveis --------------------------------
+
+
+def test_voice_catalog_starts_with_current_default_for_every_language():
+    """A lista de cada idioma começa pela voz atual — ela é o padrão de quem não escolhe."""
+    for lang_code, vozes in kokoro_speaker_module.VOICES_BY_LANG_CODE.items():
+        assert vozes[0] == kokoro_speaker_module.VOICE_BY_LANG_CODE[lang_code]
+
+
+def test_voice_catalog_lists_portuguese_three_voices():
+    assert kokoro_speaker_module.VOICES_BY_LANG_CODE["p"] == [
+        "pf_dora",
+        "pm_alex",
+        "pm_santa",
+    ]
+
+
+def test_voice_catalog_english_default_comes_before_alloy():
+    """Ordenar alfabeticamente quebraria: af_alloy viria antes de af_heart."""
+    vozes = kokoro_speaker_module.VOICES_BY_LANG_CODE["a"]
+    assert vozes[0] == "af_heart"
+    assert vozes.index("af_heart") < vozes.index("af_alloy")
+
+
 def test_kokoro_speaker_synthesize_returns_audio_chunk_with_engine_used_kokoro(
     pipeline_factory,
 ):

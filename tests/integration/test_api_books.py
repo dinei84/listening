@@ -544,6 +544,65 @@ def test_create_book_with_invalid_language_falls_back_to_auto(
     assert book.language is None
 
 
+def test_post_books_accepts_voice(temp_paths, fake_working_pipeline):
+    files = _upload_files()
+    files["language"] = (None, "pt")
+    files["voice"] = (None, "pm_alex")
+
+    with TestClient(app) as client:
+        response = client.post("/books", files=files)
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.voice == "pm_alex"
+
+
+def test_post_books_rejects_voice_from_another_language(
+    temp_paths, fake_working_pipeline
+):
+    """Uma voz portuguesa num livro marcado como inglês é inconsistência, não intenção."""
+    files = _upload_files()
+    files["language"] = (None, "en")
+    files["voice"] = (None, "pm_alex")
+
+    with TestClient(app) as client:
+        response = client.post("/books", files=files)
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.language == "en"
+    assert book.voice is None
+
+
+def test_post_books_ignores_unknown_voice(temp_paths, fake_working_pipeline):
+    files = _upload_files()
+    files["language"] = (None, "pt")
+    files["voice"] = (None, "voz_que_nao_existe")
+
+    with TestClient(app) as client:
+        response = client.post("/books", files=files)
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.voice is None
+
+
+def test_post_books_forces_none_voice_when_language_is_auto(
+    temp_paths, fake_working_pipeline
+):
+    """Idioma Automático: o idioma só é conhecido depois da detecção, então voz é forçada a None."""
+    files = _upload_files()
+    files["voice"] = (None, "pm_alex")
+
+    with TestClient(app) as client:
+        response = client.post("/books", files=files)
+
+    assert response.status_code == 200
+    book = db_module.get_book(response.json()["id"])
+    assert book.language is None
+    assert book.voice is None
+
+
 def test_post_books_prioritize_returns_404_for_unknown_book(temp_paths):
     with TestClient(app) as client:
         response = client.post("/books/does-not-exist/prioritize")

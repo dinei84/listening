@@ -83,6 +83,23 @@ class CountingSpeaker(Speaker):
         )
 
 
+class VoiceRecordingSpeaker(CountingSpeaker):
+    """Speaker dublê que também registra a voz de cada chamada — usado para provar que a voz escolhida atravessa a degradação de custo."""
+
+    def __init__(self, cost_per_char=0.0):
+        super().__init__()
+        self._cost_per_char = cost_per_char
+        self.voices = []
+
+    @property
+    def cost_per_char(self):
+        return self._cost_per_char
+
+    def synthesize(self, text, voice=None, lang_code=None):
+        self.voices.append(voice)
+        return super().synthesize(text, voice=voice, lang_code=lang_code)
+
+
 class PaidSpeaker(CountingSpeaker):
     """Speaker pago fictício (cost_per_char > 0), registrado como 'paid'."""
 
@@ -140,7 +157,7 @@ def temp_paths(tmp_path, monkeypatch):
     return upload_dir
 
 
-def _create_book_and_pdf(upload_dir, book_id="book-1"):
+def _create_book_and_pdf(upload_dir, book_id="book-1", voice=None):
     upload_dir.mkdir(parents=True, exist_ok=True)
     uploads_module.pdf_path_for(book_id).write_bytes(b"%PDF-1.4 fake content")
     book = Book(
@@ -149,6 +166,7 @@ def _create_book_and_pdf(upload_dir, book_id="book-1"):
         original_filename="test.pdf",
         status="uploaded",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        voice=voice,
     )
     db_module.create_book(book)
     return book
@@ -316,3 +334,34 @@ def test_estimate_happens_before_any_speaker_call(temp_paths, monkeypatch):
     worker_tasks.process_job(job)
 
     assert db_module.get_book(book.id).status == "ready"
+
+
+def test_voice_is_passed_even_when_degraded_to_fallback(temp_paths, monkeypatch):
+    """A voz escolhida não pode se perder quando a trava de custo degrada para a voz local (OS-053)."""
+    book = _create_book_and_pdf(temp_paths, voice="pm_alex")
+    paid = VoiceRecordingSpeaker(cost_per_char=0.001)
+    local = VoiceRecordingSpeaker(cost_per_char=0.0)
+    monkeypatch.setattr(
+        config_module,
+        "load_config",
+        lambda: FakeConfig(speaker="paid", max_cost_per_book=0.01),
+    )
+    monkeypatch.setattr(
+        registry_module, "EXTRACTORS", {"fake_extractor": FakeExtractor}
+    )
+    monkeypatch.setattr(
+        registry_module, "SPEAKERS", {"paid": lambda: paid, "kokoro": lambda: local}
+    )
+    queue = sqlite_queue_module.SQLiteJobQueue()
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    queue.enqueue(job)
+    db_module.set_book_cost_confirmed(book.id, True)
+    db_module.update_book_status(book.id, "uploaded")
+
+    worker_tasks.process_job(job)
+
+    fetched = db_module.get_book(book.id)
+    assert fetched.status == "ready"
+    assert fetched.cost_degraded is True
+    assert paid.voices == [], "Speaker pago não pode rodar acima do teto"
+    assert local.voices == ["pm_alex"], "a voz escolhida atravessa a degradação"
