@@ -99,6 +99,11 @@ def process_job(job: Job) -> None:
 
         def _persist(chunk: AudioChunk) -> None:
             audio_store.persist_chunks(job.book_id, [chunk])
+            # OS-051: bater AQUI, e não só no laço de polling. Durante a síntese
+            # de um capítulo o worker fica minutos sem voltar ao laço, e sem este
+            # batimento um worker trabalhando seria reportado como morto — o
+            # oposto do que o sinal existe para dizer.
+            db.record_worker_heartbeat()
             # Preempção cooperativa (OS-032): entre um chunk e outro o worker
             # pergunta se existe Job queued de prioridade maior esperando. Se
             # sim, para no fim do chunk corrente (que já foi persistido acima)
@@ -174,6 +179,11 @@ def run_worker(poll_interval: float = 1.0, max_iterations: int | None = None) ->
     cfg = config_module.load_config()
     queue = registry_module.QUEUES[cfg.queue]()
 
+    # O worker roda em processo separado do `uvicorn`, então não pode depender de
+    # a API ter subido antes para as tabelas existirem. init_db é idempotente
+    # (OS-051 — antes disso, só o api/main.py inicializava o banco).
+    db.init_db()
+
     # Assume um único worker ativo por vez (decisão #11): sem heartbeat/lease não há
     # como distinguir um Job de outro worker vivo de um deixado por um worker morto.
     for orphan in queue.requeue_orphaned():
@@ -183,8 +193,13 @@ def run_worker(poll_interval: float = 1.0, max_iterations: int | None = None) ->
             orphan.book_id,
         )
 
+    # Antes do primeiro job: quem sobe o worker precisa ver o sinal na hora, sem
+    # esperar um livro entrar na fila.
+    db.record_worker_heartbeat()
+
     iterations = 0
     while max_iterations is None or iterations < max_iterations:
+        db.record_worker_heartbeat()
         job = queue.claim_next()
         if job is not None:
             process_job(job)

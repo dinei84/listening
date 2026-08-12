@@ -131,7 +131,9 @@ def test_heartbeat_older_than_threshold_reports_worker_stopped(tmp_path):
     """O limiar precisa acomodar o chunk mais lento; acima dele, o worker é dado como parado."""
     caminho = str(tmp_path / "t.db")
     db.init_db(caminho)
-    antigo = datetime.now(UTC) - timedelta(seconds=db.WORKER_HEARTBEAT_TIMEOUT_SECONDS + 5)
+    antigo = datetime.now(UTC) - timedelta(
+        seconds=db.WORKER_HEARTBEAT_TIMEOUT_SECONDS + 5
+    )
     db.record_worker_heartbeat(moment=antigo, db_path=caminho)
     assert db.worker_is_alive(db_path=caminho) is False
 

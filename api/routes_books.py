@@ -179,6 +179,16 @@ async def get_book_chapters(book_id: str) -> list[dict[str, str | int]]:
     ]
 
 
+@router.get("/worker")
+async def get_worker_status() -> dict[str, bool | str | None]:
+    """Diz se há worker ativo e quando foi o último batimento. Sem worker nunca é erro — é o estado de quem não subiu o processo."""
+    ultimo = db.last_worker_heartbeat()
+    return {
+        "alive": db.worker_is_alive(),
+        "last_heartbeat_at": ultimo.isoformat() if ultimo else None,
+    }
+
+
 @router.get("/books/{book_id}/progress")
 async def get_book_progress(book_id: str) -> dict[str, str | int | float]:
     """Devolve a posição de leitura salva de um Book. 404 se o livro não existir ou se a posição nunca foi salva."""

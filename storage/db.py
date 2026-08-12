@@ -1,9 +1,19 @@
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from core.models import Book, Chapter
 
 DEFAULT_DB_PATH = "books.db"
+
+# Depois de quanto tempo sem batimento o worker é dado como parado (OS-051).
+# Precisa acomodar o chunk mais lento: o worker só bate entre chunks, e com um
+# Speaker remoto um chunk demora bem mais que com o Kokoro local. 120s dá folga
+# sem tornar a detecção inútil.
+WORKER_HEARTBEAT_TIMEOUT_SECONDS = 120
+
+# Linha única da tabela de batimento. Decisão #11: um worker ativo por vez, então
+# o batimento é sobrescrito em vez de acumulado.
+_HEARTBEAT_ROW_ID = 1
 
 
 def _resolve_path(db_path: str | None) -> str:
@@ -44,9 +54,58 @@ def init_db(db_path: str | None = None) -> None:
                 PRIMARY KEY (book_id, id)
             )
             """)
+        # Tabela NOVA, nunca coluna nova numa tabela existente (OS-051): o projeto
+        # não tem migração de schema, e `CREATE TABLE IF NOT EXISTS` cria tabela
+        # ausente mas nunca adiciona coluna. Adicionar coluna já quebrou o
+        # books.db local nas OS-018, OS-032 e OS-042, sempre com erro obscuro do
+        # SQLite. Como tabela, o heartbeat aparece sozinho em banco antigo.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS worker_heartbeat (
+                id INTEGER PRIMARY KEY,
+                beat_at TEXT NOT NULL
+            )
+            """)
         conn.commit()
     finally:
         conn.close()
+
+
+def record_worker_heartbeat(
+    moment: datetime | None = None, db_path: str | None = None
+) -> None:
+    """Registra que o worker está vivo neste instante, sobrescrevendo o batimento anterior."""
+    quando = moment if moment is not None else datetime.now(UTC)
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO worker_heartbeat (id, beat_at) VALUES (?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET beat_at = excluded.beat_at",
+            (_HEARTBEAT_ROW_ID, quando.isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def last_worker_heartbeat(db_path: str | None = None) -> datetime | None:
+    """Devolve o instante do último batimento do worker, ou None se nunca houve nenhum."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        row = conn.execute(
+            "SELECT beat_at FROM worker_heartbeat WHERE id = ?", (_HEARTBEAT_ROW_ID,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return datetime.fromisoformat(row[0]) if row else None
+
+
+def worker_is_alive(db_path: str | None = None) -> bool:
+    """True quando há batimento dentro do limiar; banco sem batimento é worker parado, nunca erro."""
+    ultimo = last_worker_heartbeat(db_path)
+    if ultimo is None:
+        return False
+    limite = timedelta(seconds=WORKER_HEARTBEAT_TIMEOUT_SECONDS)
+    return datetime.now(UTC) - ultimo <= limite
 
 
 def create_book(book: Book, db_path: str | None = None) -> None:

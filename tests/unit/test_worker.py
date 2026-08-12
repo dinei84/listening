@@ -735,6 +735,7 @@ def test_resume_consistency_check_works_across_chapters(temp_paths, chapter_pipe
 
 def test_worker_records_heartbeat_on_startup(temp_paths, fake_working_pipeline):
     """Antes de qualquer job: quem sobe o worker precisa ver o sinal imediatamente."""
+    db_module.init_db()
     assert db_module.worker_is_alive() is False
     worker_tasks.run_worker(poll_interval=0, max_iterations=1)
     assert db_module.worker_is_alive() is True
