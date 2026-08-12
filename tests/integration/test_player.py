@@ -111,3 +111,17 @@ def test_player_upload_form_has_normalize_checkbox(tmp_path, monkeypatch):
 
     assert 'id="normalize-checkbox"' in html
     assert "normalize_text" in js
+
+
+def test_player_has_worker_warning_element(tmp_path, monkeypatch):
+    """OS-051: 'na fila com worker' e 'na fila sem ninguém' eram o mesmo estado na tela."""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setattr(db_module, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(audio_store_module, "DEFAULT_DB_PATH", db_path)
+
+    with TestClient(app) as client:
+        html = client.get("/").text
+        js = client.get("/app.js").text
+
+    assert 'id="worker-warning"' in html
+    assert "/worker" in js

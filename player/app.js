@@ -29,6 +29,7 @@ const prevBtn = document.getElementById("prev-btn");
 const playPauseBtn = document.getElementById("play-pause-btn");
 const nextBtn = document.getElementById("next-btn");
 const speedSelect = document.getElementById("speed-select");
+const workerWarning = document.getElementById("worker-warning");
 const resumeBanner = document.getElementById("resume-banner");
 const resumeBtn = document.getElementById("resume-btn");
 const restartBtn = document.getElementById("restart-btn");
@@ -398,10 +399,36 @@ async function deleteBook(bookId) {
   }
 }
 
+// Estados em que o livro depende do worker para sair do lugar. Sem worker, a
+// tela dizia exatamente o mesmo que diria com tudo funcionando (OS-051).
+const WAITING_FOR_WORKER = ["uploaded", "extracting", "processing", "synthesizing"];
+
+async function updateWorkerWarning(books) {
+  const esperando = books.some((book) => WAITING_FOR_WORKER.includes(book.status));
+  if (!esperando) {
+    workerWarning.hidden = true;
+    return;
+  }
+  try {
+    const response = await fetch("/worker");
+    if (!response.ok) return;
+    const { alive } = await response.json();
+    workerWarning.hidden = alive;
+    if (!alive) {
+      workerWarning.textContent =
+        "Nenhum worker ativo — os livros abaixo não vão processar. " +
+        "Suba o worker com: python -m worker.tasks";
+    }
+  } catch {
+    // Falha ao consultar o worker não pode atrapalhar a lista de livros.
+  }
+}
+
 async function refreshBooksList() {
   try {
     const books = await fetchBooks();
     renderBooksList(books);
+    updateWorkerWarning(books);
   } catch (err) {
     booksListEmpty.hidden = false;
     booksListEmpty.textContent = `Erro ao carregar livros: ${err.message}`;

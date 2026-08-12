@@ -728,3 +728,39 @@ def test_resume_consistency_check_works_across_chapters(temp_paths, chapter_pipe
     assert len(audio_store_module.list_chunks(book.id)) == total_primeira
     assert speaker.call_count == chamadas_primeira
     assert db_module.get_book(book.id).status == "ready"
+
+
+# --- OS-051: o worker precisa bater nos dois estados ------------------------
+
+
+def test_worker_records_heartbeat_on_startup(temp_paths, fake_working_pipeline):
+    """Antes de qualquer job: quem sobe o worker precisa ver o sinal imediatamente."""
+    db_module.init_db()
+    assert db_module.worker_is_alive() is False
+    worker_tasks.run_worker(poll_interval=0, max_iterations=1)
+    assert db_module.worker_is_alive() is True
+
+
+def test_worker_records_heartbeat_while_synthesizing(
+    temp_paths, fake_working_pipeline, monkeypatch
+):
+    """O ponto difícil da OS: durante process_job o worker fica minutos fora do laço
+    de polling, e sem bater por chunk um worker TRABALHANDO pareceria morto."""
+    batimentos: list[str] = []
+    real = db_module.record_worker_heartbeat
+
+    def espiao(*args, **kwargs):
+        batimentos.append("bateu")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(db_module, "record_worker_heartbeat", espiao)
+
+    book = _create_book_and_pdf(temp_paths)
+    job = Job(id="job-1", book_id=book.id, stage="process", status="queued")
+    sqlite_queue_module.SQLiteJobQueue().enqueue(job)
+
+    # Só process_job, sem o laço de polling: o batimento medido aqui vem
+    # obrigatoriamente de dentro da síntese.
+    worker_tasks.process_job(job)
+
+    assert batimentos, "nenhum batimento registrado durante a síntese"
