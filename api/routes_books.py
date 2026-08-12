@@ -8,7 +8,10 @@ from pydantic import BaseModel
 from core import config as config_module
 from core.models import Book, Job
 from plugins import registry as registry_module
-from plugins.speakers.kokoro_speaker import LANG_CODE_BY_LANGUAGE
+from plugins.speakers.kokoro_speaker import (
+    LANG_CODE_BY_LANGUAGE,
+    VOICES_BY_LANG_CODE,
+)
 from storage import audio_store, db, progress_store, uploads
 
 router = APIRouter()
@@ -34,8 +37,9 @@ async def create_book(
     file: UploadFile,
     language: str | None = Form(default=None),
     normalize_text: bool = Form(default=False),
+    voice: str | None = Form(default=None),
 ) -> dict[str, str]:
-    """Recebe um PDF (e um idioma opcional), salva em disco, cria o Book e enfileira um Job de processamento assíncrono."""
+    """Recebe um PDF (e opcionalmente idioma e voz), salva em disco, cria o Book e enfileira um Job de processamento assíncrono."""
     book_id = str(uuid.uuid4())
     uploads.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     pdf_path = uploads.pdf_path_for(book_id)
@@ -44,6 +48,15 @@ async def create_book(
 
     # Idioma inválido/desconhecido degrada para None (detecção automática), nunca erro.
     valid_language = language if language in LANG_CODE_BY_LANGUAGE else None
+    # Voz (OS-053): espelha o language — valor inválido é ausência, nunca erro.
+    # Validação contra o idioma ESCOLHIDO: voz que não pertence a ele é
+    # inconsistência, não intenção; com idioma Automático a voz é forçada a None,
+    # porque o idioma só é conhecido depois da detecção.
+    valid_voice = None
+    if valid_language:
+        lang_code = LANG_CODE_BY_LANGUAGE[valid_language]
+        if voice in VOICES_BY_LANG_CODE.get(lang_code, []):
+            valid_voice = voice
     book = Book(
         id=book_id,
         title=file.filename or book_id,
@@ -51,6 +64,7 @@ async def create_book(
         status="uploaded",
         created_at=datetime.now(UTC),
         language=valid_language,
+        voice=valid_voice,
         # Opt-in do nível médio (OS-038): sem isso, NoOp e nenhuma rede.
         normalize_text=normalize_text,
     )

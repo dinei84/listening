@@ -222,9 +222,7 @@ def _persist_previous_chunk(book_id, sequence):
     )
 
 
-def _create_book_and_pdf(
-    upload_dir, book_id="book-1", language=None, voice=None
-):
+def _create_book_and_pdf(upload_dir, book_id="book-1", language=None, voice=None):
     upload_dir.mkdir(parents=True, exist_ok=True)
     uploads_module.pdf_path_for(book_id).write_bytes(b"%PDF-1.4 fake content")
     db_module.init_db()

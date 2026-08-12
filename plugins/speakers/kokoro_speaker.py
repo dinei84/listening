@@ -50,6 +50,68 @@ VOICE_BY_LANG_CODE = {
     "z": "zf_xiaoxiao",
 }
 
+# Catálogo de vozes selecionáveis por idioma (OS-053), com o MESMO levantamento da
+# OS-020. CONTRATO DE ORDENAÇÃO: a lista de cada idioma começa pela voz padrão atual
+# (`VOICE_BY_LANG_CODE`) — ela é o padrão de quem não escolhe, e ordenar alfabeticamente
+# quebraria o comportamento de todo livro já existente (em inglês, af_alloy viria antes
+# de af_heart). Usado pela API para validar a voz escolhida contra o idioma do livro.
+VOICES_BY_LANG_CODE = {
+    "a": [
+        "af_heart",
+        "af_alloy",
+        "af_aoede",
+        "af_bella",
+        "af_jessica",
+        "af_kore",
+        "af_nicole",
+        "af_nova",
+        "af_river",
+        "af_sarah",
+        "af_sky",
+        "am_adam",
+        "am_echo",
+        "am_eric",
+        "am_fenrir",
+        "am_liam",
+        "am_michael",
+        "am_onyx",
+        "am_puck",
+        "am_santa",
+    ],
+    "b": [
+        "bf_alice",
+        "bf_emma",
+        "bf_isabella",
+        "bf_lily",
+        "bm_daniel",
+        "bm_fable",
+        "bm_george",
+        "bm_lewis",
+    ],
+    "e": ["ef_dora", "em_alex", "em_santa"],
+    "f": ["ff_siwis"],
+    "h": ["hf_alpha", "hf_beta", "hm_omega", "hm_psi"],
+    "i": ["if_sara", "im_nicola"],
+    "j": [
+        "jf_alpha",
+        "jf_gongitsune",
+        "jf_nezumi",
+        "jf_tebukuro",
+        "jm_kumo",
+    ],
+    "p": ["pf_dora", "pm_alex", "pm_santa"],
+    "z": [
+        "zf_xiaoxiao",
+        "zf_xiaobei",
+        "zf_xiaoni",
+        "zf_xiaoyi",
+        "zm_yunjian",
+        "zm_yunxi",
+        "zm_yunxia",
+        "zm_yunyang",
+    ],
+}
+
 # Abaixo deste tamanho o langdetect erra muito ("Hello" vira finlandês, "Capitulo 1"
 # vira romeno — medido na OS-020). A detecção estabilizou a partir de ~20 caracteres
 # nas amostras testadas; 40 dá o dobro de margem. Textos menores que isso reaproveitam

@@ -124,6 +124,7 @@ def process_job(job: Job) -> None:
                 sequence_offset=offset,
                 speaker_name=cfg.fallback_speaker if degraded else None,
                 normalize=book.normalize_text,
+                voice=book.voice,
             )
             offset += chapter_chunks
         db.update_book_status(job.book_id, "ready")
