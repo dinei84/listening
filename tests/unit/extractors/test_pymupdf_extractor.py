@@ -135,9 +135,9 @@ def test_pymupdf_keeps_first_block_when_it_is_real_content():
 
 def test_pymupdf_body_size_is_measured_per_document():
     """Limiar absoluto quebraria em qualquer PDF cujo corpo não seja 9,7pt."""
-    from plugins.extractors.pymupdf_extractor import _body_size
-
     import fitz
+
+    from plugins.extractors.pymupdf_extractor import _body_size
 
     doc = fitz.open(STYLED_PDF)
     assert _body_size(doc) == 10.0
