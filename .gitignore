@@ -1,5 +1,7 @@
 # Ambiente virtual Python
-venv/
+# venv*/ e não venv/: o spike da OS-041B usa venv-chatterbox/ separado, porque o
+# Chatterbox puxa torch 2.6 e rebaixaria o 2.13 do ambiente principal.
+venv*/
 .env
 
 # Cache Python
