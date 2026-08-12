@@ -94,3 +94,57 @@ def test_pymupdf_extract_contract_unchanged():
     assert paginas[0].source == "pymupdf"
     assert paginas[0].page_number == 1
     assert isinstance(paginas[0].text, str)
+
+
+# --- OS-050: blocos que não são texto do autor -----------------------------
+
+STYLED_PDF = os.path.join(FIXTURES_DIR, "styled_blocks_sample.pdf")
+
+
+def _texto_extraido(caminho=STYLED_PDF):
+    return "\n\n".join(p.text for p in PyMuPDFExtractor().extract(caminho))
+
+
+def test_pymupdf_drops_running_header():
+    """9,3pt no livro real (0,96x do corpo): escapa de qualquer limiar de tamanho, só a posição o pega."""
+    assert "TITULO DO LIVRO" not in _texto_extraido()
+
+
+def test_pymupdf_drops_footnote_block():
+    """Nota de rodapé era narrada no meio do parágrafo; descartada como URL e e-mail na OS-040."""
+    assert "nota de rodape" not in _texto_extraido()
+
+
+def test_pymupdf_keeps_heading_block():
+    assert "TITULO DA SECAO" in _texto_extraido()
+
+
+def test_pymupdf_keeps_italic_quote_block():
+    """Citação continua narrada; o que a OS-050 não faz é dar registro diferente a ela."""
+    assert "medo de parecer fraco" in _texto_extraido()
+
+
+def test_pymupdf_keeps_body_block():
+    assert "corpo do texto" in _texto_extraido()
+
+
+def test_pymupdf_keeps_first_block_when_it_is_real_content():
+    """O risco declarado na OS: descartar por posição não pode comer conteúdo legítimo do topo."""
+    assert "conteudo real do autor" in _texto_extraido()
+
+
+def test_pymupdf_body_size_is_measured_per_document():
+    """Limiar absoluto quebraria em qualquer PDF cujo corpo não seja 9,7pt."""
+    from plugins.extractors.pymupdf_extractor import _body_size
+
+    import fitz
+
+    doc = fitz.open(STYLED_PDF)
+    assert _body_size(doc) == 10.0
+    doc.close()
+
+
+def test_pymupdf_style_classification_does_not_break_os049_blocks():
+    """As fronteiras de bloco da OS-049 seguem valendo entre o que sobrou."""
+    texto = PyMuPDFExtractor().extract(STYLED_PDF)[0].text
+    assert "TITULO DA SECAO\n\nEste e o corpo" in texto
