@@ -1,4 +1,7 @@
 extractor: pymupdf
+# Motor de voz. "kokoro" roda local e não custa nada; "openai" usa a API paga
+# (OS-055) e exige OPENAI_API_KEY no .env — a estimativa de custo da OS-042 passa
+# a valer, então o livro para em "Aguardando confirmação de custo" antes de gastar.
 speaker: kokoro
 queue: sqlite
 # Teto de segurança por livro (OS-042): se a estimativa de custo de um livro
