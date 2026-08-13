@@ -13,6 +13,7 @@ import soundfile as sf
 from core import config as config_module
 from core.models import AudioChunk, Chapter, ExtractedPage
 from plugins import registry as registry_module
+from plugins.normalizers.base import ChainNormalizer, TextNormalizer
 from plugins.speakers.base import TransientSpeakerError
 from processing.chunker import chunk_text
 from processing.cleaner import clean_text
@@ -274,20 +275,63 @@ def _merge_wav_files(paths: list[str]) -> tuple[str, float]:
     return path, len(combined) / (sample_rate or 24000)
 
 
-def _build_normalizer(cfg):
-    """Constrói o TextNormalizer configurado; qualquer falha de construção degrada para 'sem normalização' em vez de derrubar o livro."""
-    factory = registry_module.NORMALIZERS.get(cfg.normalizer)
+def _build_sub_normalizer(
+    cfg,
+    *,
+    name,
+    base_url,
+    model,
+    api_key_env,
+    cost_per_char,
+    divergence_ratio,
+) -> TextNormalizer | None:
+    """Constrói um único elo da cadeia de normalização; None se desligado ou inexistente."""
+    if name is None or name == "noop":
+        return None
+    factory = registry_module.NORMALIZERS.get(name)
     if factory is None:
         return None
-    if cfg.normalizer == "noop":
-        return factory()
     return factory(
-        base_url=cfg.normalizer_base_url,
-        model=cfg.normalizer_model,
-        api_key_env=cfg.normalizer_api_key_env,
-        cost_per_char=cfg.normalizer_cost_per_char,
-        divergence_ratio=cfg.normalizer_divergence_ratio,
+        base_url=base_url,
+        model=model,
+        api_key_env=api_key_env,
+        cost_per_char=cost_per_char,
+        divergence_ratio=divergence_ratio,
     )
+
+
+def _build_normalizer(cfg) -> TextNormalizer | None:
+    """Constrói a cadeia de normalização configurada (notação + prosódia); qualquer falha de construção degrada para 'sem normalização' em vez de derrubar o livro.
+
+    Ordem obrigatória: notação primeiro, prosódia depois (OS-054 seção 5) — a
+    notação expande palavras (números por extenso) e a prosódia só mexe em
+    pontuação, então rodar prosódia sobre o texto já normalizado é o único jeito
+    de o guarda-corpo de identidade de palavras fazer sentido.
+    """
+    notation = _build_sub_normalizer(
+        cfg,
+        name=getattr(cfg, "normalizer", "noop"),
+        base_url=getattr(cfg, "normalizer_base_url", "https://api.openai.com/v1"),
+        model=getattr(cfg, "normalizer_model", ""),
+        api_key_env=getattr(cfg, "normalizer_api_key_env", "LLM_API_KEY"),
+        cost_per_char=getattr(cfg, "normalizer_cost_per_char", 0.0),
+        divergence_ratio=getattr(cfg, "normalizer_divergence_ratio", None),
+    )
+    prosody = _build_sub_normalizer(
+        cfg,
+        name=getattr(cfg, "prosody_normalizer", "noop"),
+        base_url=getattr(cfg, "prosody_base_url", "https://api.openai.com/v1"),
+        model=getattr(cfg, "prosody_model", ""),
+        api_key_env=getattr(cfg, "prosody_api_key_env", "PROSODY_API_KEY"),
+        cost_per_char=getattr(cfg, "prosody_cost_per_char", 0.0),
+        divergence_ratio=getattr(cfg, "prosody_divergence_ratio", None),
+    )
+    chain = [n for n in (notation, prosody) if n is not None]
+    if not chain:
+        return None
+    if len(chain) == 1:
+        return chain[0]
+    return ChainNormalizer(chain)
 
 
 def _synthesize_with_retry(

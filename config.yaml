@@ -25,3 +25,17 @@ normalizer:
   api_key_env: LLM_API_KEY                # a chave NUNCA fica neste arquivo
   cost_per_char: 0.0000012                # para a trava de custo da OS-042
   # divergence_ratio: 0.5                 # janela do guarda-corpo (padrão: +100%/-15%)
+
+# Preparação prosódica (OS-054) — segundo passe de LLM, separado da notação acima.
+# Só ajusta a PONTUAÇÃO (vírgula/pausa, divisão de frase longa), com guarda-corpo
+# próprio que exige a sequência de palavras idêntica. Desligado por padrão: "prosody"
+# só entra na cadeia se o dono ligar e fornecer a chave. Ligar dobra a estimativa de
+# custo do nível médio (notação + prosódia) para melhorar ~13% das frases.
+prosody:
+  name: noop
+  # base_url: https://api.deepseek.com/v1  # qualquer endpoint compatível com OpenAI
+  # model: deepseek-chat
+  # api_key_env: PROSODY_API_KEY           # a chave NUNCA fica neste arquivo
+  # cost_per_char: 0.0000012               # somado à estimativa da OS-042
+  # divergence_ratio: 0.5
+
