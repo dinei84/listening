@@ -33,46 +33,54 @@ Fora de escopo:
 - **Roteamento por outro critério** (frase longa, diálogo). Só `!` e `?` nesta OS.
 - **Casar timbre entre os motores.** Ver seção 6 — é o risco aceito.
 
-## 5. Desenho
+## 5. Desenho — decisão do dono, validada por medição
 
-O ponto de corte já existe: `_split_into_pause_segments` (OS-045) divide o chunk em frases e devolve `(texto, pausa_ms)`. O roteamento decide o Speaker **por segmento**, sintetiza cada um e concatena — que é o que o `KokoroSpeaker` já faz internamente com os seus pedaços.
+O desenho original roteava **frase a frase**. O dono propôs outro, depois de ouvir o efeito das pausas num texto de frases curtas: **contar as frases expressivas do chunk e, se passarem de um limiar, mandar o chunk INTEIRO para o motor pago** — em vez de alternar dentro dele.
 
-Duas restrições que a implementação precisa respeitar:
+Medido em 230 chunks reais (páginas 24–140 do "Programador Pragmático", 216.365 caracteres):
 
-**Taxa de amostragem.** Kokoro entrega 24 kHz. A OpenAI também, no formato `wav` — verificado no spike (o arquivo medido tinha `sr=24000`). Se um motor futuro divergir, o áudio precisa ser reamostrado antes de concatenar, senão a velocidade muda no meio da frase.
+| Limiar | Chunks marcados | % do livro no pago | **Trocas de motor** | US$/livro |
+|---|---|---|---|---|
+| 1 | 85 | 37,1% | 86 | 3,19 |
+| 2 | 44 | 19,2% | 56 | 1,65 |
+| **3** | 21 | **9,2%** | **32** | **0,79** |
+| 4 | 14 | 6,1% | 25 | 0,53 |
+| 5 | 10 | 4,3% | 17 | 0,37 |
+| *(por frase)* | — | *9,0%* | *~374* | *0,78* |
 
-**Casamento de volume.** Motores diferentes têm loudness diferente, e o ouvinte percebe salto de volume antes de perceber troca de voz. A concatenação precisa normalizar — RMS é suficiente e não exige dependência nova.
+**O limiar 3 entrega a mesma cobertura e o mesmo custo do roteamento por frase, com 12× menos trocas.** É o padrão adotado, configurável.
 
-## 6. O risco aceito, declarado
+Duas consequências que tornam este desenho superior ao original:
 
-Motores diferentes têm **vozes diferentes**. Estimadas ~506 trocas de timbre por livro roteando por frase. O dono decidiu seguir mesmo assim, com o argumento de que os poucos momentos ruins pesam mais na experiência do que a média sugere — e a estimativa de que soaria mal **nunca foi verificada de ouvido**, é suposição registrada como tal.
+- **A troca cai em fronteira de chunk**, que já tem pausa de parágrafo ou de frase. Trocar de voz num silêncio é muito menos perceptível que trocar no meio da prosa.
+- **Não há concatenação de motores diferentes dentro de um `AudioChunk`.** Cada chunk tem um motor só, então some o problema de casar volume e taxa de amostragem no meio do áudio — o `_merge_wav_files` continua juntando pedaços de um mesmo motor, como já fazia.
 
-**Esta OS deve produzir uma amostra audível** de um parágrafo real com roteamento ativo, antes de qualquer conclusão sobre o resultado. Se a descontinuidade incomodar, a alternativa já estudada é o item 55: trocar **estilo** dentro de um motor só, sem trocar de voz.
+**Custo do trade-off, declarado:** uma pergunta isolada num chunk de prosa (abaixo do limiar) continua no motor local, sem melhoria. É deliberado — melhorar essa frase custaria uma troca de timbre que o dono já constatou ser pior que o defeito.
 
 ## 7. Critérios de aceite
 
-- [ ] Frase com `?` ou `!` vai para o Speaker caro; as demais vão para o barato
-- [ ] O chunk devolvido é **um** `AudioChunk`, com a mesma granularidade de sempre
-- [ ] A ordem das frases é preservada na concatenação
-- [ ] As pausas da OS-045 continuam entre os segmentos, venham de qual motor vierem
-- [ ] O volume é normalizado entre segmentos de motores diferentes
+- [ ] Chunk com **≥ limiar** frases expressivas vai inteiro para o Speaker pago
+- [ ] Chunk abaixo do limiar vai inteiro para o Speaker local
+- [ ] O limiar é configurável, com padrão 3
+- [ ] Nenhum `AudioChunk` mistura motores — cada um tem um `engine_used` só
+- [ ] `AudioChunk.engine_used` reflete o motor realmente usado naquele chunk
 - [ ] Roteamento desligado (padrão) não muda absolutamente nada
-- [ ] A estimativa da OS-042 reflete só a fração roteada, não o livro inteiro
-- [ ] Falha do motor caro num segmento degrada **aquele segmento** para o barato, sem derrubar o livro
+- [ ] A estimativa da OS-042 conta **só a fração roteada**, não o livro inteiro
+- [ ] Falha do motor pago num chunk degrada **aquele chunk** para o local, sem derrubar o livro
+- [ ] As pausas da OS-045 seguem valendo dentro de cada chunk
 - [ ] Uma amostra de áudio de parágrafo real é gerada e anexada ao relatório
 - [ ] Nenhum teste existente quebra
 
 ## 8. Testes exigidos (mínimo)
 
-- `test_routes_expressive_sentence_to_premium_speaker`
-- `test_routes_plain_sentence_to_local_speaker`
-- `test_preserves_sentence_order_in_concatenation`
-- `test_keeps_single_audio_chunk_per_text_chunk`
-- `test_keeps_os045_pauses_between_routed_segments`
-- `test_normalizes_volume_across_engines`
+- `test_chunk_above_threshold_goes_to_premium_speaker`
+- `test_chunk_below_threshold_goes_to_local_speaker`
+- `test_threshold_is_configurable`
+- `test_audio_chunk_records_engine_actually_used`
 - `test_routing_disabled_changes_nothing`
-- `test_estimate_counts_only_routed_fraction`
-- `test_premium_failure_degrades_that_segment_to_local`
+- `test_estimate_counts_only_routed_chunks`
+- `test_premium_failure_degrades_chunk_to_local`
+- `test_no_audio_chunk_mixes_engines`
 
 ## 9. Relatório
 
