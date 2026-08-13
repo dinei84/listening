@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 
 import yaml
+from dotenv import load_dotenv
 
 _DEFAULT_CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml"
@@ -39,6 +40,23 @@ class Config:
     prosody_api_key_env: str = "PROSODY_API_KEY"
     prosody_cost_per_char: float = 0.0
     prosody_divergence_ratio: float | None = None
+
+
+DEFAULT_ENV_PATH = ".env"
+
+
+def load_env_file(path: str = DEFAULT_ENV_PATH) -> None:
+    """Carrega variáveis de ambiente de um arquivo .env, sem sobrescrever o que já está no ambiente; arquivo ausente é silencioso."""
+    # `override=False` de propósito: variável exportada no shell vence o arquivo.
+    # O contrário faria um .env esquecido sobrescrever calado a chave que a pessoa
+    # acabou de exportar — o tipo de surpresa que já custou caro nesta sessão.
+    load_dotenv(path, override=False)
+
+
+# Carregado na importação porque tanto o worker quanto a API importam este módulo
+# antes de qualquer leitura de chave. python-dotenv está no requirements.txt desde
+# o começo do projeto, declarado e nunca usado até a OS-055.
+load_env_file()
 
 
 def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:

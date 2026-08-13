@@ -30,7 +30,7 @@ def test_registry_has_openai_speaker():
     """Até a OS-055 só havia Kokoro, e todo teste de expressividade usou ele por falta de opção."""
     from plugins.speakers.openai_speaker import OpenAISpeaker
 
-    assert registry.SPEAKERS["openai"] is OpenAISpeaker
+    assert SPEAKERS["openai"] is OpenAISpeaker
 
 
 def test_empty_cloud_speaker_placeholder_was_removed():
