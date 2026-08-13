@@ -159,8 +159,13 @@ def test_openai_voice_argument_overrides_configured_voice(monkeypatch):
     assert enviados["voice"] == "alloy"
 
 
-def test_openai_requires_api_key():
-    """Falha rápida com aviso (decisão do dono, 13/08/2026), em vez de degradar calado."""
+def test_openai_requires_api_key(monkeypatch):
+    """Falha rápida com aviso (decisão do dono, 13/08/2026), em vez de degradar calado.
+
+    `delenv` é obrigatório: o core.config carrega o .env na importação (OS-055), e
+    sem isto o teste passa ou falha conforme a máquina tenha ou não uma chave
+    configurada — foi o que aconteceu assim que o dono criou o próprio .env."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(PermanentSpeakerError, match="OPENAI_API_KEY"):
         OpenAISpeaker(api_key=None, model="gpt-4o-mini-tts", voice="nova").synthesize(
             "Uma frase."

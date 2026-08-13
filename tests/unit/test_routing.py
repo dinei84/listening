@@ -171,11 +171,13 @@ def test_degraded_speaker_name_disables_routing(monkeypatch, motores):
 
 
 def test_estimate_counts_only_routed_chunks(monkeypatch, motores):
-    """A estimativa da OS-042 precisa refletir a fração roteada, não o livro inteiro."""
+    """A estimativa da OS-042 precisa refletir a fração roteada, não o livro inteiro.
+    O texto é longo de propósito: precisa render mais de um chunk, senão tudo cai
+    no mesmo e a distinção não é exercida."""
     _config(monkeypatch)
-    texto = DENSO + "\n\n" + PROSA
+    texto = DENSO + "\n\n" + (PROSA + " ") * 12
     custo = pipeline.estimate_cost(texto)
-    assert custo > 0
+    assert custo > 0, "o chunk denso deve ser cobrado no preço do pago"
     assert custo < len(texto) * 1.608e-05, "não pode cobrar o livro inteiro no pago"
 
 

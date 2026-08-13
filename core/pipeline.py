@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import tempfile
@@ -14,10 +15,12 @@ from core import config as config_module
 from core.models import AudioChunk, Chapter, ExtractedPage
 from plugins import registry as registry_module
 from plugins.normalizers.base import ChainNormalizer, TextNormalizer
-from plugins.speakers.base import TransientSpeakerError
+from plugins.speakers.base import SpeakerError, TransientSpeakerError
 from processing.chunker import chunk_text
 from processing.cleaner import clean_text
 from processing.sanitizer import sanitize_text
+
+logger = logging.getLogger(__name__)
 
 # Páginas por capítulo sintético quando o PDF não traz sumário embutido (OS-027).
 # Valor arbitrário mas estável: grande o bastante para o cleaner ainda detectar
@@ -229,7 +232,20 @@ def estimate_cost(text: str, normalize: bool = False) -> float:
     text = sanitize_text(text)
     cfg = config_module.load_config()
     speaker = registry_module.SPEAKERS[cfg.speaker]()
-    custo = len(text) * speaker.cost_per_char
+    # OS-056: com roteamento ligado, cada chunk é cobrado pelo motor que de fato vai
+    # sintetizá-lo. Cobrar o livro inteiro no preço do pago inflaria a estimativa em
+    # ~10x, e o usuário recusaria um custo que não existe.
+    premium = _premium_speaker(cfg) if getattr(cfg, "routing_enabled", False) else None
+    if premium is not None:
+        custo = sum(
+            len(pedaco)
+            * (
+                premium if _should_route_to_premium(pedaco, cfg) else speaker
+            ).cost_per_char
+            for pedaco in chunk_text(text)
+        )
+    else:
+        custo = len(text) * speaker.cost_per_char
     if normalize:
         normalizer = _build_normalizer(cfg)
         if normalizer is not None:
@@ -298,6 +314,53 @@ def _build_sub_normalizer(
         cost_per_char=cost_per_char,
         divergence_ratio=divergence_ratio,
     )
+
+
+# Sinais que caracterizam frase expressiva (OS-056). Interrogação e exclamação são
+# onde o Kokoro falha de forma audível — 9,0% das frases em prosa técnica real.
+_EXPRESSIVE_MARKS = "!?"
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _expressive_sentence_count(text: str) -> int:
+    """Conta as frases do texto que contêm `!` ou `?`."""
+    return sum(
+        1
+        for frase in _SENTENCE_SPLIT_RE.split(text)
+        if frase.strip() and any(marca in frase for marca in _EXPRESSIVE_MARKS)
+    )
+
+
+def _should_route_to_premium(text: str, cfg) -> bool:
+    """True quando o chunk é denso o bastante em expressividade para valer o motor pago (OS-056)."""
+    if not getattr(cfg, "routing_enabled", False):
+        return False
+    return _expressive_sentence_count(text) >= cfg.routing_min_expressive
+
+
+def _premium_speaker(cfg):
+    """Constrói o Speaker pago do roteamento; None se não estiver registrado."""
+    fabrica = registry_module.SPEAKERS.get(cfg.routing_premium_speaker)
+    return fabrica() if fabrica is not None else None
+
+
+def _synthesize_pieces(speaker, piece: str, lang_code, voice, cfg) -> list[AudioChunk]:
+    """Divide o texto no limite declarado pelo Speaker (OS-043) e sintetiza cada pedaço com retry."""
+    # O limite é lido do Speaker ESCOLHIDO, não de um fixo: Kokoro não declara
+    # limite e a OpenAI declara 4096, e desde a OS-056 os dois convivem no mesmo livro.
+    char_limit = getattr(speaker, "max_request_chars", None)
+    return [
+        _synthesize_with_retry(
+            speaker,
+            sub,
+            lang_code,
+            voice,
+            cfg.retry_max_attempts,
+            cfg.retry_base_delay_seconds,
+            cfg.retry_max_delay_seconds,
+        )
+        for sub in _split_by_char_limit(piece, char_limit)
+    ]
 
 
 def _build_normalizer(cfg) -> TextNormalizer | None:
@@ -386,10 +449,15 @@ def synthesize_text(
     # OS-038: sem opt-in, nem o normalizador é construído — o nível simples não paga
     # nada, nem em latência, nem em rede.
     normalizer = _build_normalizer(cfg) if normalize else None
-    # OS-043: se o Speaker declarar limite de caracteres por requisição, o texto do
-    # chunk é dividido em pedaços que respeitam o limite (nunca cortando palavra) e
-    # os áudios são concatenados num único AudioChunk — mesma granularidade de sempre.
-    char_limit = getattr(speaker, "max_request_chars", None)
+    # OS-056: o motor pago só é construído quando o roteamento está ligado. Com
+    # `speaker_name` explícito o roteamento fica DESLIGADO: esse parâmetro é usado
+    # pela trava da OS-042 ao degradar para a voz local justamente para não gastar,
+    # e rotear ali reintroduziria o custo que a degradação existe para evitar.
+    premium = (
+        _premium_speaker(cfg)
+        if speaker_name is None and getattr(cfg, "routing_enabled", False)
+        else None
+    )
 
     audio_chunks: list[AudioChunk] = []
     for sequence, piece in pending:
@@ -398,19 +466,28 @@ def synthesize_text(
         # orçamento errado — mesma razão da OS-037 com o mapa fonético.
         if normalizer is not None:
             piece = normalizer.normalize(piece)
-        pieces = _split_by_char_limit(piece, char_limit)
-        sub_chunks = [
-            _synthesize_with_retry(
-                speaker,
-                sub,
-                lang_code,
-                voice,
-                cfg.retry_max_attempts,
-                cfg.retry_base_delay_seconds,
-                cfg.retry_max_delay_seconds,
+
+        # OS-056: a decisão é por CHUNK, não por frase. O chunk inteiro vai para um
+        # motor só — daí nenhum AudioChunk misturar timbres, e não haver volume nem
+        # taxa de amostragem para casar no meio do áudio.
+        escolhido = (
+            premium
+            if premium is not None and _should_route_to_premium(piece, cfg)
+            else speaker
+        )
+        try:
+            sub_chunks = _synthesize_pieces(escolhido, piece, lang_code, voice, cfg)
+        except SpeakerError:
+            # Falha do motor pago degrada ESTE chunk para o local, sem derrubar o
+            # livro: o texto continua sendo narrado, só que sem o ganho de voz.
+            if escolhido is speaker:
+                raise
+            logger.warning(
+                "Motor %s falhou no chunk %d; degradando para o motor local",
+                cfg.routing_premium_speaker,
+                sequence,
             )
-            for sub in pieces
-        ]
+            sub_chunks = _synthesize_pieces(speaker, piece, lang_code, voice, cfg)
         if len(sub_chunks) == 1:
             audio_chunk = sub_chunks[0]
         else:
