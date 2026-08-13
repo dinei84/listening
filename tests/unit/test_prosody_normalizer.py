@@ -17,9 +17,11 @@ from core import config as config_module
 from core import pipeline
 from plugins import registry as registry_module
 from plugins.normalizers.base import ChainNormalizer, NoOpNormalizer, TextNormalizer
-from plugins.normalizers.llm_normalizer import LLMNormalizer, from_config as llm_from_config
+from plugins.normalizers.llm_normalizer import from_config as llm_from_config
 from plugins.normalizers.prosody_normalizer import (
     ProsodyNormalizer,
+)
+from plugins.normalizers.prosody_normalizer import (
     from_config as prosody_from_config,
 )
 
@@ -77,7 +79,9 @@ def test_prosody_accepts_punctuation_only_change(monkeypatch):
         lambda text: "A frase longa, com uma pausa natural, respira melhor.",
     )
 
-    resultado = normalizer.normalize("A frase longa com uma pausa natural respira melhor.")
+    resultado = normalizer.normalize(
+        "A frase longa com uma pausa natural respira melhor."
+    )
 
     assert resultado == "A frase longa, com uma pausa natural, respira melhor."
 
@@ -105,9 +109,7 @@ def test_prosody_rejects_added_word(monkeypatch):
 def test_prosody_rejects_removed_word(monkeypatch):
     normalizer = ProsodyNormalizer(base_url="x", model="m", api_key="k")
     original = "Ele leu o capítulo inteiro."
-    monkeypatch.setattr(
-        normalizer, "_call_api", lambda text: "Ele leu o inteiro."
-    )
+    monkeypatch.setattr(normalizer, "_call_api", lambda text: "Ele leu o inteiro.")
 
     assert normalizer.normalize(original) == original
 
@@ -147,9 +149,7 @@ def test_chain_applies_normalizers_in_order():
 
         return _transform
 
-    chain = ChainNormalizer(
-        [EchoNormalizer(fazer("A")), EchoNormalizer(fazer("B"))]
-    )
+    chain = ChainNormalizer([EchoNormalizer(fazer("A")), EchoNormalizer(fazer("B"))])
 
     resultado = chain.normalize("texto")
 
@@ -159,7 +159,10 @@ def test_chain_applies_normalizers_in_order():
 
 def test_chain_cost_is_the_sum_of_links():
     chain = ChainNormalizer(
-        [EchoNormalizer(lambda t: t, cost=0.002), EchoNormalizer(lambda t: t, cost=0.001)]
+        [
+            EchoNormalizer(lambda t: t, cost=0.002),
+            EchoNormalizer(lambda t: t, cost=0.001),
+        ]
     )
 
     assert chain.cost_per_char == pytest.approx(0.003)
@@ -170,6 +173,15 @@ def test_chain_cost_is_the_sum_of_links():
 
 def test_estimate_cost_includes_chain_cost(monkeypatch):
     """A cadeia notação+prosódia soma os custos e a trava da OS-042 os enxerga."""
+
+    class FreeSpeaker:
+        @property
+        def cost_per_char(self):
+            return 0.0
+
+        def synthesize(self, text, voice=None, lang_code=None):
+            raise AssertionError("não deveria sintetizar ao estimar")
+
     monkeypatch.setattr(
         config_module,
         "load_config",
@@ -179,6 +191,11 @@ def test_estimate_cost_includes_chain_cost(monkeypatch):
             prosody_normalizer="prosody",
             prosody_cost_per_char=0.001,
         ),
+    )
+    monkeypatch.setattr(
+        registry_module,
+        "SPEAKERS",
+        {"fake_speaker": lambda: FreeSpeaker()},
     )
     monkeypatch.setattr(
         registry_module,
@@ -221,7 +238,9 @@ def test_prosody_disabled_by_default_makes_no_network_call(monkeypatch):
 
     def _boom(text):
         chamadas.append(text)
-        raise AssertionError("a rede da prosódia não deveria ser chamada quando desligada")
+        raise AssertionError(
+            "a rede da prosódia não deveria ser chamada quando desligada"
+        )
 
     monkeypatch.setattr(
         registry_module,
@@ -238,7 +257,7 @@ def test_prosody_disabled_by_default_makes_no_network_call(monkeypatch):
     )
 
     normalizer = pipeline._build_normalizer(config_module.load_config())
-    # Com a prosódia desligada e a notação em noop, o resultado é a própria cadeia de noop.
-    assert isinstance(normalizer, ChainNormalizer)
+    # Com a prosódia desligada (sem chave) e a notação em noop, o normalizador não
+    # deve tocar a rede — devolve o texto original intacto.
     assert normalizer.normalize("Texto qualquer.") == "Texto qualquer."
     assert chamadas == [], "a rede da prosódia não pode ser chamada quando desligada"
