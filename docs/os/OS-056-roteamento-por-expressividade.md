@@ -2,7 +2,7 @@
 
 ## 1. Objetivo
 
-Dentro de cada chunk, mandar **só as frases com `!` ou `?`** para o motor caro, sintetizar o resto no Kokoro e devolver tudo concatenado no mesmo `AudioChunk`. Entrega a qualidade do motor pago nos trechos que importam, pagando por ~9% do livro.
+Mandar para o motor caro **só os chunks densos em `!` e `?`**, mantendo o resto no motor local. Entrega a qualidade do motor pago onde a expressividade importa, pagando por ~9% do livro e trocando de voz 32 vezes em vez de 374.
 
 ## 2. Depende da OS-055
 
@@ -12,18 +12,18 @@ Sem um segundo `Speaker` registrado não há para onde rotear. A OS-055 entrega 
 
 | | |
 |---|---|
-| Frases com `!` ou `?` em prosa técnica real | **9,1%** (211 de 2.327, capítulos 1–4 do "Programador Pragmático") |
+| Frases com `!` ou `?` em prosa técnica real | **9,0%** (187 de 2.076, páginas 24–140 do "Programador Pragmático") |
 | Livro inteiro na OpenAI | US$ 8,58 |
-| **Roteando por frase (9,1%)** | **US$ 0,78** |
-| Roteando por chunk (1000 chars) | US$ 3,42 — amplificação de 8 a 9,6× |
+| **Chunks densos, limiar 3** | **US$ 0,79 — 9,2% do livro, 32 trocas** |
+| Marcar chunk com **um** `?` (limiar 1) | US$ 3,19 — 37,1% do livro |
 
-**Rotear por frase é obrigatório.** Um chunk de 1000 caracteres tem ~10 frases, e um único `?` mandaria as dez para o motor pago.
+O limiar existe justamente para evitar a amplificação: sem ele, um único `?` mandaria as ~10 frases do chunk para o motor pago, e 37% do livro iria junto.
 
 ## 4. Escopo
 
 Alterados:
 
-- `core/pipeline.py` — roteamento por frase dentro do chunk e concatenação.
+- `core/pipeline.py` — contagem por chunk, escolha do Speaker e estimativa.
 - `core/config.py` e `config.yaml` — bloco do roteamento.
 - Testes correspondentes.
 
@@ -31,7 +31,8 @@ Fora de escopo:
 
 - **Estilo/instrução diferente por tipo de frase.** Esta OS roteia; calibrar o `instructions` por tipo é ajuste posterior.
 - **Roteamento por outro critério** (frase longa, diálogo). Só `!` e `?` nesta OS.
-- **Casar timbre entre os motores.** Ver seção 6 — é o risco aceito.
+- **Casar volume e taxa de amostragem entre motores.** Deixou de ser necessário: como o chunk inteiro vai para um motor só, nenhum `AudioChunk` mistura fontes.
+- **Melhorar pergunta isolada** em chunk de prosa. Ver o trade-off na seção 5.
 
 ## 5. Desenho — decisão do dono, validada por medição
 
@@ -57,7 +58,7 @@ Duas consequências que tornam este desenho superior ao original:
 
 **Custo do trade-off, declarado:** uma pergunta isolada num chunk de prosa (abaixo do limiar) continua no motor local, sem melhoria. É deliberado — melhorar essa frase custaria uma troca de timbre que o dono já constatou ser pior que o defeito.
 
-## 7. Critérios de aceite
+## 6. Critérios de aceite
 
 - [ ] Chunk com **≥ limiar** frases expressivas vai inteiro para o Speaker pago
 - [ ] Chunk abaixo do limiar vai inteiro para o Speaker local
@@ -71,7 +72,7 @@ Duas consequências que tornam este desenho superior ao original:
 - [ ] Uma amostra de áudio de parágrafo real é gerada e anexada ao relatório
 - [ ] Nenhum teste existente quebra
 
-## 8. Testes exigidos (mínimo)
+## 7. Testes exigidos (mínimo)
 
 - `test_chunk_above_threshold_goes_to_premium_speaker`
 - `test_chunk_below_threshold_goes_to_local_speaker`
@@ -82,6 +83,6 @@ Duas consequências que tornam este desenho superior ao original:
 - `test_premium_failure_degrades_chunk_to_local`
 - `test_no_audio_chunk_mixes_engines`
 
-## 9. Relatório
+## 8. Relatório
 
 Ver `docs/report/OS-056-report.md`.
