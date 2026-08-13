@@ -31,6 +31,14 @@ class Config:
     normalizer_api_key_env: str = "LLM_API_KEY"
     normalizer_cost_per_char: float = 0.0
     normalizer_divergence_ratio: float | None = None
+    # Preparação prosódica (OS-054): segundo passe de LLM que só ajusta pontuação.
+    # Desligado por padrão ("noop") — só faz rede se o dono ligar e fornecer a chave.
+    prosody_normalizer: str = "noop"
+    prosody_base_url: str = "https://api.openai.com/v1"
+    prosody_model: str = ""
+    prosody_api_key_env: str = "PROSODY_API_KEY"
+    prosody_cost_per_char: float = 0.0
+    prosody_divergence_ratio: float | None = None
 
 
 def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
@@ -39,6 +47,7 @@ def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
         data = yaml.safe_load(f)
     retry = data.get("retry", {})
     norm = data.get("normalizer", {})
+    prosody = data.get("prosody", {})
     return Config(
         extractor=data["extractor"],
         speaker=data["speaker"],
@@ -54,4 +63,10 @@ def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
         normalizer_api_key_env=norm.get("api_key_env", "LLM_API_KEY"),
         normalizer_cost_per_char=norm.get("cost_per_char", 0.0),
         normalizer_divergence_ratio=norm.get("divergence_ratio"),
+        prosody_normalizer=prosody.get("name", "noop"),
+        prosody_base_url=prosody.get("base_url", "https://api.openai.com/v1"),
+        prosody_model=prosody.get("model", ""),
+        prosody_api_key_env=prosody.get("api_key_env", "PROSODY_API_KEY"),
+        prosody_cost_per_char=prosody.get("cost_per_char", 0.0),
+        prosody_divergence_ratio=prosody.get("divergence_ratio"),
     )

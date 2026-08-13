@@ -3,6 +3,7 @@ from plugins.extractors.pymupdf_extractor import PyMuPDFExtractor
 from plugins.extractors.tesseract_ocr import TesseractOCR
 from plugins.normalizers.base import NoOpNormalizer
 from plugins.normalizers.llm_normalizer import from_config as _llm_from_config
+from plugins.normalizers.prosody_normalizer import from_config as _prosody_from_config
 from plugins.queues.sqlite_queue import SQLiteJobQueue
 from plugins.speakers.kokoro_speaker import KokoroSpeaker
 
@@ -26,4 +27,7 @@ QUEUES = {
 NORMALIZERS = {
     "noop": NoOpNormalizer,
     "llm": _llm_from_config,
+    # Preparação prosódica (OS-054): segundo passe que só ajusta pontuação,
+    # com guarda-corpo próprio de identidade de palavras. Desligado por padrão.
+    "prosody": _prosody_from_config,
 }
