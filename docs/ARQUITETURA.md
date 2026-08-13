@@ -256,6 +256,8 @@ Regra de decisão: `NoOpNormalizer` é o padrão e **não toca a rede** — o n�
 
 **O contrato exige que `normalize()` nunca levante.** Normalização é melhoria opcional: rede fora, credencial ausente ou resposta malformada devolvem o texto original, nunca derrubam o livro. Além disso a implementação de LLM aplica um guarda-corpo contra alteração de conteúdo — janela assimétrica de tamanho (expandir é legítimo, encolher é sinal de resumo) e detecção de preâmbulo conversacional.
 
+**`ChainNormalizer` (OS-054) compõe vários `TextNormalizer` num único `TextNormalizer`.** Recebe a lista na ordem em que deve ser aplicada e aplica um após o outro; seu `cost_per_char` é a soma dos elos, de modo que a trava de custo da OS-042 enxerga a cadeia sem alteração em `estimate_cost`. É usado para encadear a normalização de notação (`LLMNormalizer`) e a preparação prosódica (`ProsodyNormalizer`), sempre na ordem **notação → prosódia** — a notação expande palavras e a prosódia só mexe em pontuação, então rodar a prosódia sobre o texto já normalizado é o único jeito de o guarda-corpo de palavras dela fazer sentido. O `ProsodyNormalizer` tem prompt e guarda-corpo próprios (identidade de sequência de palavras, não divergência de tamanho) e é desligado por padrão (`config.yaml` `prosody.name: noop`).
+
 ### 4.5 Registro de plugins
 
 ```python
