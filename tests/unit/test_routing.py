@@ -12,13 +12,17 @@ from core import config as config_module
 from core import pipeline
 from core.models import AudioChunk
 from plugins import registry as registry_module
-from plugins.speakers.base import PermanentSpeakerError, Speaker
+from plugins.speakers.base import (
+    PermanentSpeakerError,
+    Speaker,
+    TransientSpeakerError,
+)
 
 
 class FakeSpeaker(Speaker):
     """Speaker de teste que registra o texto recebido e se identifica no AudioChunk."""
 
-    def __init__(self, nome: str, custo: float = 0.0, falha: bool = False):
+    def __init__(self, nome: str, custo: float = 0.0, falha: Exception | None = None):
         self.nome = nome
         self._custo = custo
         self._falha = falha
@@ -29,8 +33,8 @@ class FakeSpeaker(Speaker):
         return self._custo
 
     def synthesize(self, text, voice=None, lang_code=None) -> AudioChunk:
-        if self._falha:
-            raise PermanentSpeakerError(f"{self.nome} recusou")
+        if self._falha is not None:
+            raise self._falha
         self.recebidos.append(text)
         return AudioChunk(
             chapter_id="",
@@ -143,10 +147,11 @@ def test_routing_disabled_changes_nothing(monkeypatch, motores):
     assert not premium.recebidos
 
 
-def test_premium_failure_degrades_chunk_to_local(monkeypatch):
-    """Falha do motor pago não pode derrubar o livro — degrada aquele chunk."""
+def test_transient_premium_failure_degrades_chunk_to_local(monkeypatch):
+    """Falha TRANSITÓRIA (rede, 429 esgotado) não pode derrubar o livro — degrada
+    aquele chunk e segue, porque o problema pode não se repetir no próximo."""
     local = FakeSpeaker("local")
-    premium = FakeSpeaker("premium", falha=True)
+    premium = FakeSpeaker("premium", falha=TransientSpeakerError("rede caiu"))
     monkeypatch.setattr(
         registry_module,
         "SPEAKERS",
@@ -158,6 +163,23 @@ def test_premium_failure_degrades_chunk_to_local(monkeypatch):
 
     assert chunks[0].engine_used == "local"
     assert local.recebidos
+
+
+def test_permanent_premium_failure_stops_the_book(monkeypatch):
+    """Falha PERMANENTE é erro de configuração — chave ausente ou inválida. Degradar
+    calado aqui foi o que fez o dono ouvir "igual ao Kokoro" sem saber por quê; ele
+    decidiu em 13/08/2026 que prefere falha rápida com aviso."""
+    local = FakeSpeaker("local")
+    premium = FakeSpeaker("premium", falha=PermanentSpeakerError("sem chave"))
+    monkeypatch.setattr(
+        registry_module,
+        "SPEAKERS",
+        {"local": lambda: local, "premium": lambda: premium},
+    )
+    _config(monkeypatch)
+
+    with pytest.raises(PermanentSpeakerError):
+        pipeline.synthesize_text(DENSO, chapter_id="c1")
 
 
 def test_degraded_speaker_name_disables_routing(monkeypatch, motores):

@@ -15,7 +15,7 @@ from core import config as config_module
 from core.models import AudioChunk, Chapter, ExtractedPage
 from plugins import registry as registry_module
 from plugins.normalizers.base import ChainNormalizer, TextNormalizer
-from plugins.speakers.base import SpeakerError, TransientSpeakerError
+from plugins.speakers.base import TransientSpeakerError
 from processing.chunker import chunk_text
 from processing.cleaner import clean_text
 from processing.sanitizer import sanitize_text
@@ -477,9 +477,14 @@ def synthesize_text(
         )
         try:
             sub_chunks = _synthesize_pieces(escolhido, piece, lang_code, voice, cfg)
-        except SpeakerError:
-            # Falha do motor pago degrada ESTE chunk para o local, sem derrubar o
-            # livro: o texto continua sendo narrado, só que sem o ganho de voz.
+        except TransientSpeakerError:
+            # Só falha TRANSITÓRIA degrada este chunk para o local: o problema pode
+            # não se repetir no próximo, e o livro continua sendo narrado.
+            #
+            # Falha PERMANENTE (chave ausente ou inválida) NÃO é degradada de
+            # propósito — ela sobe e vira Book "error" com a mensagem do Speaker.
+            # Degradar calado aqui fez o dono ouvir "igual ao Kokoro" sem saber por
+            # quê, contrariando a decisão dele de 13/08/2026: falha rápida com aviso.
             if escolhido is speaker:
                 raise
             logger.warning(

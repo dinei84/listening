@@ -56,6 +56,6 @@ prosody:
 # decisão é por chunk, e a troca cai numa fronteira que já tem pausa.
 # Exige OPENAI_API_KEY no .env e `enabled: true`.
 routing:
-  enabled: false
+  enabled: true
   premium_speaker: openai
   min_expressive_sentences: 3
