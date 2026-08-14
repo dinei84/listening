@@ -72,6 +72,27 @@ def test_openai_writes_playable_wav(monkeypatch, tmp_path):
         assert arquivo.getframerate() == 24000
 
 
+def test_openai_maps_insufficient_quota_to_permanent_error(monkeypatch):
+    """429 por falta de crédito NÃO é transitório: retentar nunca resolve, e tratar
+    como transitório fez o livro inteiro degradar para o Kokoro em silêncio — o
+    dono passou rodadas achando que a IA estava sendo usada e não estava."""
+    import io
+    import urllib.error
+
+    speaker = _speaker()
+    corpo = io.BytesIO(
+        b'{"error":{"type":"insufficient_quota","code":"credit_balance_exhausted",'
+        b'"message":"You have no credits remaining."}}'
+    )
+
+    def explode(*args, **kwargs):
+        raise urllib.error.HTTPError("url", 429, "Too Many Requests", {}, corpo)
+
+    monkeypatch.setattr(speaker, "_post", explode)
+    with pytest.raises(PermanentSpeakerError, match="crédito"):
+        speaker.synthesize("Uma frase qualquer.")
+
+
 @pytest.mark.parametrize("status", [429, 500, 502, 503])
 def test_openai_maps_retryable_status_to_transient_error(monkeypatch, status):
     """OS-043: o retry com backoff só age em TransientSpeakerError."""

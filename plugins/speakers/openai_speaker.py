@@ -27,6 +27,21 @@ MAX_REQUEST_CHARS = 4096
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504}
 
 
+def _is_quota_exhausted(exc: urllib.error.HTTPError) -> bool:
+    """True quando o 429 é saldo esgotado, e não limite de taxa passageiro."""
+    try:
+        corpo = json.loads(exc.read().decode())
+    # Captura ampla intencional: corpo ausente ou malformado não pode transformar
+    # um erro de rede em outro erro; na dúvida, trata como limite de taxa.
+    except Exception:  # noqa: BLE001
+        return False
+    erro = corpo.get("error", {})
+    return (
+        erro.get("type") == "insufficient_quota"
+        or erro.get("code") == "credit_balance_exhausted"
+    )
+
+
 class OpenAISpeaker(Speaker):
     """Speaker que sintetiza via API da OpenAI (`/v1/audio/speech`), com custo por caractere derivado de medição real."""
 
@@ -112,6 +127,17 @@ class OpenAISpeaker(Speaker):
         try:
             return self._post(payload)
         except urllib.error.HTTPError as exc:
+            # 429 é ambíguo: pode ser limite de taxa (passa sozinho) ou saldo
+            # esgotado (nunca passa). Tratar os dois como transitório fez o livro
+            # degradar calado para o motor local durante rodadas inteiras, enquanto
+            # o dono achava que a IA estava sendo usada. O corpo da resposta separa
+            # os dois casos, então é ele que decide.
+            if exc.code == 429 and _is_quota_exhausted(exc):
+                raise PermanentSpeakerError(
+                    "OpenAI recusou por falta de crédito na conta — retentar não "
+                    "resolve. Adicione créditos em "
+                    "https://platform.openai.com/settings/organization/billing/"
+                ) from exc
             if exc.code in RETRYABLE_STATUS:
                 raise TransientSpeakerError(
                     f"OpenAI respondeu {exc.code}; tentativa pode ser repetida"
