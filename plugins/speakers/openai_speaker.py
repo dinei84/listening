@@ -42,6 +42,36 @@ def _is_quota_exhausted(exc: urllib.error.HTTPError) -> bool:
     )
 
 
+def _normalize_wav(audio: bytes) -> tuple[bytes, float]:
+    """Regrava o WAV com os tamanhos reais e devolve (bytes, duração em segundos).
+
+    A API responde com WAV de *streaming*: RIFF size e data size marcados como
+    0xFFFFFFFF, que significa "comprimento desconhecido". O módulo `wave` clampa
+    isso em 2**31-1 frames, e a duração saía 89.478 s para 4,9 s reais de áudio —
+    contaminando barra de progresso, posição de retomada e navegação por trecho.
+    Por isso a duração vem da contagem REAL de bytes, nunca do cabeçalho.
+    """
+    with wave.open(io.BytesIO(audio), "rb") as lido:
+        canais, largura, taxa = (
+            lido.getnchannels(),
+            lido.getsampwidth(),
+            lido.getframerate(),
+        )
+        # readframes devolve o que existe de fato, independente do que o
+        # cabeçalho declara — é ele que revela o tamanho verdadeiro.
+        quadros = lido.readframes(lido.getnframes())
+
+    saida = io.BytesIO()
+    with wave.open(saida, "wb") as escrito:
+        escrito.setnchannels(canais)
+        escrito.setsampwidth(largura)
+        escrito.setframerate(taxa)
+        escrito.writeframes(quadros)
+
+    duracao = len(quadros) / (canais * largura) / taxa if taxa else 0.0
+    return saida.getvalue(), duracao
+
+
 class OpenAISpeaker(Speaker):
     """Speaker que sintetiza via API da OpenAI (`/v1/audio/speech`), com custo por caractere derivado de medição real."""
 
@@ -89,15 +119,10 @@ class OpenAISpeaker(Speaker):
                 "ambiente para usar o Speaker da OpenAI."
             )
 
-        audio = self._call_api(text, voice or self._voice)
+        audio, duration = _normalize_wav(self._call_api(text, voice or self._voice))
         file_path = os.path.join(tempfile.gettempdir(), f"openai_{hash(text)}.wav")
         with open(file_path, "wb") as arquivo:
             arquivo.write(audio)
-
-        # A duração vem do cabeçalho do próprio WAV devolvido pela API: é a fonte
-        # confiável, e evita supor taxa de amostragem que pode mudar no futuro.
-        with wave.open(io.BytesIO(audio), "rb") as lido:
-            duration = lido.getnframes() / lido.getframerate()
 
         return AudioChunk(
             chapter_id="",

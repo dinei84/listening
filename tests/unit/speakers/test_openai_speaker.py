@@ -191,3 +191,45 @@ def test_openai_requires_api_key(monkeypatch):
         OpenAISpeaker(api_key=None, model="gpt-4o-mini-tts", voice="nova").synthesize(
             "Uma frase."
         )
+
+
+def _streaming_wav_bytes(seconds: float = 1.0, sample_rate: int = 24000) -> bytes:
+    """WAV com tamanho 'desconhecido' (0xFFFFFFFF), que é o que a API realmente devolve."""
+    valido = _wav_bytes(seconds, sample_rate)
+    desconhecido = (0xFFFFFFFF).to_bytes(4, "little")
+    # RIFF size (offset 4) e data size (offset 40) marcados como indefinidos.
+    return valido[:4] + desconhecido + valido[8:40] + desconhecido + valido[44:]
+
+
+def test_openai_duration_is_measured_from_real_bytes(monkeypatch, tmp_path):
+    """A API devolve WAV de streaming com data size 0xFFFFFFFF; o `wave` clampa
+    getnframes() em 2**31-1 e a duração saía 89.478s para 4,9s reais de áudio.
+    A duração alimenta barra de progresso, retomada e navegação por trecho."""
+    speaker = _speaker()
+    monkeypatch.setattr(
+        speaker, "_call_api", lambda text, voice: _streaming_wav_bytes(3.0)
+    )
+    monkeypatch.setattr(
+        "plugins.speakers.openai_speaker.tempfile.gettempdir", lambda: str(tmp_path)
+    )
+
+    chunk = speaker.synthesize("Uma frase qualquer.")
+
+    assert chunk.duration_seconds == pytest.approx(3.0, rel=1e-2)
+
+
+def test_openai_rewrites_streaming_wav_with_real_sizes(monkeypatch, tmp_path):
+    """O arquivo gravado precisa ser um WAV bem formado: o player e o
+    _merge_wav_files do pipeline leem o cabeçalho para saber o tamanho."""
+    speaker = _speaker()
+    monkeypatch.setattr(
+        speaker, "_call_api", lambda text, voice: _streaming_wav_bytes(2.0)
+    )
+    monkeypatch.setattr(
+        "plugins.speakers.openai_speaker.tempfile.gettempdir", lambda: str(tmp_path)
+    )
+
+    chunk = speaker.synthesize("Uma frase qualquer.")
+
+    with wave.open(chunk.file_path, "rb") as arquivo:
+        assert arquivo.getnframes() == int(2.0 * 24000)
