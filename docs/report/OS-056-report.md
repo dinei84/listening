@@ -33,7 +33,7 @@ Específico (seção 6 da OS):
 - [x] A estimativa da OS-042 conta só a fração roteada
 - [x] Falha **transitória** do pago degrada aquele chunk; **permanente** para o livro (ver seção 5)
 - [x] Pausas da OS-045 seguem valendo dentro de cada chunk
-- [ ] **Amostra de áudio de parágrafo real anexada** — ver seção 6
+- [x] **Amostra de áudio de parágrafo real anexada** — cumprido em 28/09/2026, ver `docs/report/OS-056-teste-troca-de-vozes.md`
 
 ## 3. Testes escritos
 
@@ -77,7 +77,7 @@ Isso também simplificou o código: como o chunk inteiro vai para um motor só, 
 
 ## 6. Dúvidas / bloqueios
 
-**A amostra de áudio exigida pelo critério de aceite não foi produzida.** A OS determinava gerar um parágrafo real com roteamento ativo antes de qualquer conclusão. Isso não aconteceu porque a conta da OpenAI ficou sem crédito durante toda a fase de testes: cada chamada voltava 429 e o sistema degradava para o local. **O item permanece aberto.**
+**A amostra de áudio foi produzida em 28/09/2026 e o item está fechado.** Na entrega original ela não existiu porque a conta da OpenAI ficou sem crédito durante toda a fase de testes: cada chamada voltava 429 e o sistema degradava para o local. Com crédito, o teste foi feito com limiar 5 sobre um texto de perfil misto, produzindo `OpenAI → Kokoro → OpenAI` em 2m27s, e **aprovado na escuta**. Registro completo em `docs/report/OS-056-teste-troca-de-vozes.md`.
 
 **A hipótese central segue não verificada.** Estimei ~506 trocas de timbre por livro no roteamento frase a frase e usei isso para argumentar contra ele. A estimativa nunca foi validada de ouvido — está registrada como suposição. O desenho por limiar reduz o problema a 32 trocas, mas **se a troca de voz na fronteira de chunk incomoda ou passa despercebida é pergunta em aberto**.
 
