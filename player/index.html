@@ -2,8 +2,19 @@
 <html lang="pt-br">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- viewport-fit=cover + as safe-area do CSS: sem isso a barra fixa de
+         controles some atras do gesto de home do iPhone. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
     <title>Audiobook Player</title>
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Audiobook" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon.svg" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -120,6 +131,7 @@
 
     <!-- timeline.js primeiro: o app.js usa o Timeline ja no carregamento. -->
     <script src="timeline.js"></script>
+    <script src="nowplaying.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

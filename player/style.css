@@ -1,16 +1,63 @@
+/* Player — folha de estilo responsiva (OS-058).
+ *
+ * Antes desta OS: 88 linhas, `max-width: 640px` e ZERO `@media`. Não estava
+ * quebrado no celular, mas nada tinha sido decidido para ele — e o celular é o
+ * aparelho em que um audiobook é de fato ouvido.
+ *
+ * Mobile-first: o corpo da folha vale para tela estreita, e os `@media` acima
+ * de 640px é que acrescentam o conforto de tela larga.
+ */
+
+:root {
+  --fundo: #ffffff;
+  --texto: #1a1a1a;
+  --texto-fraco: #555555;
+  --texto-tenue: #888888;
+  --borda: #dddddd;
+  --realce: #f5f5f5;
+  --aviso-fundo: #fff3cd;
+  --aviso-borda: #f0d878;
+  /* 44px é o mínimo de alvo de toque para o dedo. Os botões estavam no tamanho
+     default do navegador, que fica perto de 24px de altura. */
+  --alvo-toque: 44px;
+}
+
+/* Audiobook é ouvido à noite, muitas vezes na cama com a luz apagada. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #15161a;
+    --texto: #e9e9ec;
+    --texto-fraco: #b3b3ba;
+    --texto-tenue: #85858f;
+    --borda: #33343c;
+    --realce: #1f2026;
+    --aviso-fundo: #3a3320;
+    --aviso-borda: #6b5d2c;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   font-family: system-ui, sans-serif;
-  max-width: 640px;
-  margin: 2rem auto;
-  padding: 0 1rem;
+  margin: 0 auto;
+  /* Espaço no rodapé para a barra fixa de controles não cobrir conteúdo. */
+  padding: 1rem 1rem 8rem;
   line-height: 1.5;
-  color: #1a1a1a;
+  color: var(--texto);
+  background: var(--fundo);
+}
+
+h1 {
+  font-size: 1.5rem;
 }
 
 section {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid var(--borda);
 }
 
 audio {
@@ -18,23 +65,48 @@ audio {
   margin-top: 0.5rem;
 }
 
-#controls {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin-top: 0.75rem;
-}
-
-#resume-banner {
-  background: #fff3cd;
-  border: 1px solid #f0d878;
-  border-radius: 4px;
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+button,
+select,
+input[type="text"],
+input[type="file"] {
+  font: inherit;
+  min-height: var(--alvo-toque);
+  color: var(--texto);
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 0 0.75rem;
 }
 
 button {
   cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Foco visível: não havia nenhum, e teclado/leitor de tela ficavam sem âncora. */
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--alvo-toque);
+}
+
+/* No celular o formulário de upload empilha; lado a lado só sobra espaço em
+   tela larga. */
+#upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
 }
 
 #books-list {
@@ -45,28 +117,43 @@ button {
 
 #books-list li {
   cursor: pointer;
-  padding: 0.5rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 0.75rem;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
   margin-bottom: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+#books-list li > span {
+  flex: 1 1 100%;
 }
 
 #books-list li:hover {
-  background: #f5f5f5;
+  background: var(--realce);
 }
 
-/* Linha de tempo do livro (OS-057). Substitui a regua nativa do <audio>, que
-   cobria um trecho de ~53 s num livro de ~7,8 h. */
+#resume-banner {
+  background: var(--aviso-fundo);
+  border: 1px solid var(--aviso-borda);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Linha de tempo do livro (OS-057). */
 #timeline {
   margin: 0.75rem 0;
 }
 
 #scrub {
   width: 100%;
-  /* Alvo de toque: a barra fina do padrao e dificil de pegar com o dedo. A
-     OS-B trata responsividade de verdade; aqui so nao piora. */
-  height: 1.5rem;
+  /* A barra fina do padrão é difícil de pegar com o dedo. */
+  height: var(--alvo-toque);
   cursor: pointer;
+  accent-color: var(--texto);
 }
 
 #scrub:disabled {
@@ -77,12 +164,120 @@ button {
 #time-readout {
   display: flex;
   justify-content: space-between;
+  gap: 0.75rem;
   margin: 0.25rem 0 0;
   font-variant-numeric: tabular-nums;
   font-size: 0.9rem;
-  color: #555;
+  color: var(--texto-fraco);
 }
 
 #time-readout span:nth-child(2) {
-  color: #888;
+  color: var(--texto-tenue);
+  text-align: right;
+}
+
+/* --------------------------------------------------------------------------
+ * Controles fixos no rodapé (OS-058)
+ *
+ * O player é a QUARTA seção da página: no celular, pausar exigia rolar por
+ * upload, lista de livros e "abrir livro existente". Fixar os controles resolve
+ * o sintoma sem introduzir troca de telas — decisão registrada na OS.
+ * -------------------------------------------------------------------------- */
+#controls {
+  /* `fixed`, não `sticky`: sticky só mantém o elemento na tela DEPOIS que a
+     rolagem passa pela posição natural dele — não o traz para a vista antes.
+     Medido no navegador a 375px: com sticky, no topo da página os controles
+     ficavam em y=981 numa viewport de 836px, ou seja fora da tela, que é
+     exatamente o problema que esta regra existe para resolver. */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.5rem;
+  /* Respeita o gesto de home do iPhone (par do viewport-fit=cover no HTML). */
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  background: var(--fundo);
+  border-top: 1px solid var(--borda);
+}
+
+#controls button {
+  flex: 1 1 auto;
+  min-width: var(--alvo-toque);
+}
+
+/* Play/Pause é o alvo mais procurado: ganha o dobro de largura. */
+#play-pause-btn {
+  flex: 2 1 auto;
+}
+
+/* O seletor de velocidade vai para a própria linha no celular. */
+#controls label {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+#controls select {
+  flex: 1 1 auto;
+}
+
+/* --------------------------------------------------------------------------
+ * Tela larga: o layout de leitura de antes desta OS, com coluna centrada.
+ * -------------------------------------------------------------------------- */
+@media (min-width: 640px) {
+  body {
+    max-width: 640px;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  #upload-form {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  #books-list li > span {
+    flex: 1 1 auto;
+  }
+
+  /* Com mouse e tela alta, fixar os controles não resolve nada e só rouba
+     altura útil. */
+  #controls {
+    position: static;
+    justify-content: flex-start;
+    padding: 0;
+    border-top: none;
+  }
+
+  #controls button,
+  #controls select {
+    flex: 0 0 auto;
+  }
+
+  #controls label {
+    flex: 0 0 auto;
+  }
+
+  body {
+    padding-bottom: 2rem;
+  }
+}
+
+/* Quem prefere menos movimento não deve levar rolagem animada. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
 }

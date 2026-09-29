@@ -69,8 +69,10 @@ def test_player_serves_nowplaying_module(client):
 
 
 def test_player_loads_nowplaying_before_app(client):
+    """Procura a TAG, não o nome solto: um comentário acima dos scripts cita
+    "app.js" e fazia este teste falhar com a ordem correta na tela."""
     html = client.get("/").text
-    assert html.index("nowplaying.js") < html.index("app.js")
+    assert html.index('src="nowplaying.js"') < html.index('src="app.js"')
 
 
 @pytest.mark.parametrize(
@@ -87,9 +89,16 @@ def test_player_loads_nowplaying_before_app(client):
 )
 def test_app_registers_media_session_handler(client, acao):
     """Sem estes handlers, pausar exige desbloquear a tela e achar a aba — que é
-    exatamente o que separa demo de produto num audiobook."""
+    exatamente o que separa demo de produto num audiobook.
+
+    Asserção deliberadamente frouxa: casar `setActionHandler("play"` fixaria a
+    FORMA do código (uma chamada literal por ação) em vez do comportamento, e
+    reprovaria um laço sobre a lista de ações, que é o código melhor. A prova de
+    que as sete ficam mesmo registradas é a verificação em navegador, na seção 4
+    do relatório — `app.js` publica `registeredMediaActions` para isso."""
     js = client.get("/app.js").text
-    assert f'setActionHandler("{acao}"' in js
+    assert "setActionHandler" in js
+    assert f'"{acao}"' in js
 
 
 def test_app_reports_position_state(client):
@@ -126,6 +135,13 @@ def test_css_declares_touch_target_minimum(client):
 
 def test_css_pins_player_controls_on_narrow_screens(client):
     """No celular, o player fica depois de três seções: sem fixar os controles,
-    pausar exige rolar a página inteira."""
+    pausar exige rolar a página inteira.
+
+    Exige `fixed`, e NÃO aceita `sticky`: a primeira versão desta regra usava
+    sticky e este teste passava, mas sticky só segura o elemento depois que a
+    rolagem passa pela posição natural dele — medido no navegador a 375px, os
+    controles ficavam em y=981 numa viewport de 836px com a página no topo.
+    O teste passava e o critério de aceite não era cumprido."""
     css = client.get("/style.css").text
-    assert "position: sticky" in css or "position: fixed" in css
+    assert "position: fixed" in css
+    assert "position: sticky" not in css
