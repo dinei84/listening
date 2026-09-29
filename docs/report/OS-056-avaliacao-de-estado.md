@@ -1,4 +1,4 @@
-# Relatório — Roteamento por expressividade: o que falta e quais trade-offs estamos enfrentando
+# OS-056 — Avaliação de estado: roteamento por expressividade
 
 **Data:** 2026-08-14
 **Tipo:** avaliação de estado (leitura de código + docs + histórico), não é relatório de OS
