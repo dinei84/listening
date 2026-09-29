@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 
 import yaml
+from dotenv import load_dotenv
 
 _DEFAULT_CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml"
@@ -40,6 +41,29 @@ class Config:
     prosody_cost_per_char: float = 0.0
     prosody_divergence_ratio: float | None = None
 
+    # Roteamento por expressividade (OS-056). Desligado por padrão: sem ele o
+    # comportamento é exatamente o de antes, um motor para o livro inteiro.
+    routing_enabled: bool = False
+    routing_premium_speaker: str = "openai"
+    routing_min_expressive: int = 3
+
+
+DEFAULT_ENV_PATH = ".env"
+
+
+def load_env_file(path: str = DEFAULT_ENV_PATH) -> None:
+    """Carrega variáveis de ambiente de um arquivo .env, sem sobrescrever o que já está no ambiente; arquivo ausente é silencioso."""
+    # `override=False` de propósito: variável exportada no shell vence o arquivo.
+    # O contrário faria um .env esquecido sobrescrever calado a chave que a pessoa
+    # acabou de exportar — o tipo de surpresa que já custou caro nesta sessão.
+    load_dotenv(path, override=False)
+
+
+# Carregado na importação porque tanto o worker quanto a API importam este módulo
+# antes de qualquer leitura de chave. python-dotenv está no requirements.txt desde
+# o começo do projeto, declarado e nunca usado até a OS-055.
+load_env_file()
+
 
 def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
     """Carrega config.yaml e retorna os nomes de extractor, speaker e queue configurados."""
@@ -48,6 +72,7 @@ def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
     retry = data.get("retry", {})
     norm = data.get("normalizer", {})
     prosody = data.get("prosody", {})
+    routing = data.get("routing", {})
     return Config(
         extractor=data["extractor"],
         speaker=data["speaker"],
@@ -69,4 +94,7 @@ def load_config(path: str = _DEFAULT_CONFIG_PATH) -> Config:
         prosody_api_key_env=prosody.get("api_key_env", "PROSODY_API_KEY"),
         prosody_cost_per_char=prosody.get("cost_per_char", 0.0),
         prosody_divergence_ratio=prosody.get("divergence_ratio"),
+        routing_enabled=routing.get("enabled", False),
+        routing_premium_speaker=routing.get("premium_speaker", "openai"),
+        routing_min_expressive=routing.get("min_expressive_sentences", 3),
     )

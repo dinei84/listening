@@ -6,6 +6,7 @@ from plugins.normalizers.llm_normalizer import from_config as _llm_from_config
 from plugins.normalizers.prosody_normalizer import from_config as _prosody_from_config
 from plugins.queues.sqlite_queue import SQLiteJobQueue
 from plugins.speakers.kokoro_speaker import KokoroSpeaker
+from plugins.speakers.openai_speaker import OpenAISpeaker
 
 EXTRACTORS = {
     "pymupdf": PyMuPDFExtractor,
@@ -15,6 +16,9 @@ EXTRACTORS = {
 
 SPEAKERS = {
     "kokoro": KokoroSpeaker,
+    # OS-055: até aqui só havia o Kokoro, e todo teste de expressividade feito
+    # no app usou ele por falta de alternativa registrada.
+    "openai": OpenAISpeaker,
 }
 
 QUEUES = {

@@ -1,4 +1,7 @@
 extractor: pymupdf
+# Motor de voz. "kokoro" roda local e não custa nada; "openai" usa a API paga
+# (OS-055) e exige OPENAI_API_KEY no .env — a estimativa de custo da OS-042 passa
+# a valer, então o livro para em "Aguardando confirmação de custo" antes de gastar.
 speaker: kokoro
 queue: sqlite
 # Teto de segurança por livro (OS-042): se a estimativa de custo de um livro
@@ -39,3 +42,20 @@ prosody:
   # cost_per_char: 0.0000012               # somado à estimativa da OS-042
   # divergence_ratio: 0.5
 
+
+# Roteamento por expressividade (OS-056). Conta as frases com "!" ou "?" em cada
+# chunk e, a partir de min_expressive_sentences, manda o chunk INTEIRO para o
+# motor pago — o resto do livro continua no motor local, de graça.
+#
+# Medido em 230 chunks reais do "Programador Pragmático":
+#   limiar 1 -> 37,1% do livro no pago, US$3,19,  86 trocas de voz
+#   limiar 3 -> 9,2%  do livro no pago, US$0,79,  32 trocas   <- padrão
+#   por frase-> 9,0%  do livro no pago, US$0,78, 374 trocas
+#
+# Trocar de motor no meio da frase é o que produz a emenda audível; por isso a
+# decisão é por chunk, e a troca cai numa fronteira que já tem pausa.
+# Exige OPENAI_API_KEY no .env e `enabled: true`.
+routing:
+  enabled: true
+  premium_speaker: openai
+  min_expressive_sentences: 3

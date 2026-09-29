@@ -21,3 +21,20 @@ def test_registry_speakers_contains_kokoro():
 
 def test_registry_queues_contains_sqlite():
     assert QUEUES["sqlite"] is SQLiteJobQueue
+
+
+# --- OS-055: Speaker pago registrado -----------------------------------------
+
+
+def test_registry_has_openai_speaker():
+    """Até a OS-055 só havia Kokoro, e todo teste de expressividade usou ele por falta de opção."""
+    from plugins.speakers.openai_speaker import OpenAISpeaker
+
+    assert SPEAKERS["openai"] is OpenAISpeaker
+
+
+def test_empty_cloud_speaker_placeholder_was_removed():
+    """cloud_speaker.py tinha 0 bytes e sugeria uma capacidade que não existia (item 52)."""
+    import pathlib
+
+    assert not pathlib.Path("plugins/speakers/cloud_speaker.py").exists()
