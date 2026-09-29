@@ -91,7 +91,9 @@ def test_audio_endpoint_negative_since_is_rejected(client, tmp_path):
     """`since` negativo não tem significado; aceitar silenciosamente esconderia
     um bug de cálculo no cliente."""
     book_id = _livro_com_chunks(tmp_path, 3)
-    assert client.get(f"/books/{book_id}/audio", params={"since": -1}).status_code == 422
+    assert (
+        client.get(f"/books/{book_id}/audio", params={"since": -1}).status_code == 422
+    )
 
 
 def test_audio_endpoint_since_on_unknown_book_is_404(client):

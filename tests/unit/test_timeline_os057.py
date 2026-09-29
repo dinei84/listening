@@ -93,15 +93,18 @@ def test_list_chunks_since_is_exclusive(tmp_path, temp_audio_store):
     """`since=N` significa "o que veio DEPOIS de N": o cliente manda a maior
     sequence que já tem, e reenviar essa mesma linha seria desperdício."""
     _persistir(tmp_path, temp_audio_store, 3)
-    assert [c.sequence for c in audio_store.list_chunks(
-        "livro-1", temp_audio_store, since=2
-    )] == []
+    assert [
+        c.sequence
+        for c in audio_store.list_chunks("livro-1", temp_audio_store, since=2)
+    ] == []
 
 
 def test_list_chunks_without_since_returns_all(tmp_path, temp_audio_store):
     """Retrocompatibilidade: sem `since`, comportamento idêntico ao de hoje."""
     _persistir(tmp_path, temp_audio_store, 4)
-    assert [c.sequence for c in audio_store.list_chunks("livro-1", temp_audio_store)] == [
+    assert [
+        c.sequence for c in audio_store.list_chunks("livro-1", temp_audio_store)
+    ] == [
         0,
         1,
         2,
@@ -111,9 +114,7 @@ def test_list_chunks_without_since_returns_all(tmp_path, temp_audio_store):
 
 def test_list_chunks_since_none_returns_all(tmp_path, temp_audio_store):
     _persistir(tmp_path, temp_audio_store, 4)
-    assert (
-        len(audio_store.list_chunks("livro-1", temp_audio_store, since=None)) == 4
-    )
+    assert len(audio_store.list_chunks("livro-1", temp_audio_store, since=None)) == 4
 
 
 def test_list_chunks_since_is_keyword_only(tmp_path, temp_audio_store):
@@ -245,8 +246,17 @@ def test_timeline_js_unit_tests_pass():
     São funções puras, sem DOM e sem navegador — a decisão aberta do dono sobre
     adotar suíte de browser (Playwright) continua intocada.
     """
+    arquivos = sorted(
+        str(caminho) for caminho in (RAIZ / "tests" / "player").glob("*.test.js")
+    )
+    # Os arquivos são passados um a um: `node --test <diretório>` não é suportado
+    # nesta versão do Node (v24 tenta CARREGAR o diretório como módulo e falha com
+    # MODULE_NOT_FOUND), e descobrir aqui evita depender de expansão do shell.
+    assert arquivos, "nenhum tests/player/*.test.js encontrado"
+
     resultado = subprocess.run(
-        ["node", "--test", "tests/player/"],
+        ["node", "--test", *arquivos],
+        check=False,
         cwd=RAIZ,
         capture_output=True,
         text=True,

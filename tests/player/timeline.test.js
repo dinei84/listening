@@ -144,3 +144,32 @@ test("remaining nunca é negativo", () => {
   assert.strictEqual(Timeline.remaining(tl, 60), 0);
   assert.strictEqual(Timeline.remaining(tl, 9999), 0);
 });
+
+// --------------------------------------------------------------------------
+// nextSince: quanto o cliente pode pedir de delta sem perder chunk
+// --------------------------------------------------------------------------
+
+test("nextSince devolve null quando não há nada conhecido", () => {
+  // Sem chunk nenhum não há delta possível: precisa pedir o payload cheio.
+  assert.strictEqual(Timeline.nextSince([]), null);
+  assert.strictEqual(Timeline.nextSince(null), null);
+});
+
+test("nextSince devolve a maior sequence quando a faixa é contígua desde 0", () => {
+  assert.strictEqual(Timeline.nextSince([{ sequence: 0 }]), 0);
+  assert.strictEqual(
+    Timeline.nextSince([{ sequence: 0 }, { sequence: 1 }, { sequence: 2 }]),
+    2
+  );
+});
+
+test("nextSince devolve null quando há buraco na faixa conhecida", () => {
+  // `worker/tasks.py::_resume_inconsistency` só compara a MAIOR sequence com o
+  // total; não impede buraco. Pedir since=25 com 10..19 faltando perderia esses
+  // trechos para sempre — na dúvida, paga a banda e pede tudo.
+  assert.strictEqual(
+    Timeline.nextSince([{ sequence: 0 }, { sequence: 1 }, { sequence: 5 }]),
+    null
+  );
+  assert.strictEqual(Timeline.nextSince([{ sequence: 3 }]), null);
+});
