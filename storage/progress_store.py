@@ -2,6 +2,7 @@ import sqlite3
 from datetime import UTC, datetime
 
 from core.models import ReadingProgress
+from storage.db import enable_wal
 
 DEFAULT_DB_PATH = "books.db"
 
@@ -14,6 +15,7 @@ def init_db(db_path: str | None = None) -> None:
     """Cria a tabela `reading_progress` no banco (idempotente), no caminho informado ou no padrão do projeto."""
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
+        enable_wal(conn)
         # book_id é a chave primária: guarda só a posição ATUAL, sempre sobrescrita.
         # Histórico de leitura está explicitamente fora do escopo (OS-028).
         conn.execute("""

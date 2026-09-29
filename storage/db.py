@@ -20,6 +20,22 @@ def _resolve_path(db_path: str | None) -> str:
     return db_path if db_path is not None else DEFAULT_DB_PATH
 
 
+def enable_wal(conn) -> None:
+    """Coloca o banco em journal_mode=WAL (idempotente), para leitor não bloquear escritor.
+
+    Medido em 29/09/2026: com `journal_mode=delete`, um leitor levava "database is
+    locked" enquanto o escritor derramava páginas para o disco — e é exatamente o
+    cenário de produção, com o worker escrevendo um chunk a cada ~1,3 s e a API
+    lendo a cada 2 s de polling.
+
+    O journal mode é propriedade do ARQUIVO, não da conexão: chamar isto no
+    `init_db` de qualquer um dos stores migra o banco no lugar e todas as conexões
+    posteriores herdam o WAL — incluindo as da `SQLiteJobQueue`, que escreve a
+    tabela `jobs` no mesmo arquivo e não precisa ser alterada.
+    """
+    conn.execute("PRAGMA journal_mode=WAL")
+
+
 def ensure_column(conn, table: str, column: str, ddl: str) -> None:
     """Adiciona uma coluna a uma tabela existente se ela não existir (idempotente)."""
     colunas = {linha[1] for linha in conn.execute(f"PRAGMA table_info({table})")}
@@ -31,6 +47,7 @@ def init_db(db_path: str | None = None) -> None:
     """Cria a tabela `books` no banco (idempotente), no caminho informado ou no padrão do projeto."""
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
+        enable_wal(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS books (
                 id TEXT PRIMARY KEY,

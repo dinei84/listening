@@ -75,7 +75,23 @@
         <button id="restart-btn" type="button">Começar do início</button>
       </p>
 
-      <audio id="audio-player" controls></audio>
+      <!-- Sem `controls` (OS-057): a regua nativa cobre a src corrente, ou seja um
+           trecho de ~53 s num livro de ~7,8 h. Quem manda agora e a barra abaixo,
+           que e a do LIVRO. Duas barras na tela seriam duas verdades. -->
+      <audio id="audio-player"></audio>
+
+      <div id="timeline">
+        <input
+          type="range"
+          id="scrub"
+          min="0"
+          max="0"
+          step="0.1"
+          value="0"
+          aria-label="Posição no livro"
+        />
+        <p id="time-readout"></p>
+      </div>
 
       <div id="chapters-section" hidden>
         <h3>Capítulos</h3>
@@ -84,7 +100,9 @@
 
       <div id="controls">
         <button id="prev-btn" type="button">◀ Anterior</button>
+        <button id="back-15-btn" type="button">↺ 15s</button>
         <button id="play-pause-btn" type="button">Play/Pause</button>
+        <button id="forward-15-btn" type="button">15s ↻</button>
         <button id="next-btn" type="button">Próximo ▶</button>
         <label>
           Velocidade:
@@ -100,6 +118,8 @@
       </div>
     </section>
 
+    <!-- timeline.js primeiro: o app.js usa o Timeline ja no carregamento. -->
+    <script src="timeline.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

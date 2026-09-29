@@ -5,6 +5,9 @@ const WAITING_MESSAGE = "Aguardando próximo trecho...";
 // Acima de ~3s no trecho corrente, "Anterior" reinicia o trecho (padrão de
 // podcast); abaixo disso, volta para o trecho anterior (OS-039).
 const PREV_RESTART_THRESHOLD_S = 3;
+// Salto fixo da OS-057. 15 s é o passo de tocador de audiobook: cobre a frase
+// perdida sem exigir mira na barra.
+const SKIP_SECONDS = 15;
 
 // Vozes selecionáveis por idioma (OS-053), espelhando o catálogo do
 // KokoroSpeaker. Chave é o valor do seletor de idioma (Automático não entra:
@@ -111,6 +114,10 @@ const workerWarning = document.getElementById("worker-warning");
 const resumeBanner = document.getElementById("resume-banner");
 const resumeBtn = document.getElementById("resume-btn");
 const restartBtn = document.getElementById("restart-btn");
+const scrub = document.getElementById("scrub");
+const timeReadout = document.getElementById("time-readout");
+const back15Btn = document.getElementById("back-15-btn");
+const forward15Btn = document.getElementById("forward-15-btn");
 
 let chunks = [];
 let currentIndex = 0;
@@ -131,6 +138,14 @@ let chapters = [];
 // Total de trechos previsto para o livro (chunks_total da OS-024). Null enquanto a
 // síntese não começou; o indicador cai no que já existe nesse caso.
 let totalChunks = null;
+
+// Linha de tempo do LIVRO (OS-057), reconstruída a cada chunk novo. É a soma dos
+// duration_seconds que o servidor já mandava — nenhum dado novo foi preciso.
+let timeline = Timeline.build([]);
+// Enquanto o dedo/mouse está na barra, o timeupdate não pode disputar a posição.
+let scrubbing = false;
+// <audio> oculto que aquece o cache do trecho seguinte (ver preloadNext).
+let preloader = null;
 
 // Vocabulário de status para a UI (OS-033): os valores da API continuam crus no
 // modelo (Book.status), só a exibição traduz. "uploaded" = Job enfileirado,
@@ -277,6 +292,73 @@ function renderChapters() {
 }
 
 // "Capítulo 2 de 12 — Introdução · trecho 45 de 340"
+// Posição absoluta no livro: início do trecho corrente + onde o áudio está dentro
+// dele. É o número que a barra e a leitura de tempo mostram.
+function absolutePosition() {
+  if (chunks.length === 0) return 0;
+  return Timeline.absolute(timeline, currentIndex, audioPlayer.currentTime || 0);
+}
+
+// Reconstrói a linha de tempo quando a lista de chunks muda (síntese em curso).
+function rebuildTimeline() {
+  timeline = Timeline.build(chunks);
+  renderTimeline();
+}
+
+// Escreve a leitura de tempo: "posição / total" à esquerda, restante à direita.
+// `sufixo` só é usado enquanto a síntese não terminou, para a barra não mentir.
+function writeReadout(posicao, sufixo) {
+  timeReadout.innerHTML = "";
+  const esquerda = document.createElement("span");
+  esquerda.textContent = `${Timeline.format(posicao)} / ${Timeline.format(timeline.total)}`;
+  const direita = document.createElement("span");
+  direita.textContent = `-${Timeline.format(Timeline.remaining(timeline, posicao))}${sufixo || ""}`;
+  timeReadout.appendChild(esquerda);
+  timeReadout.appendChild(direita);
+}
+
+function renderTimeline() {
+  const vazio = chunks.length === 0 || timeline.total <= 0;
+  scrub.disabled = vazio;
+  if (vazio) {
+    scrub.max = 0;
+    scrub.value = 0;
+    timeReadout.textContent = "";
+    return;
+  }
+
+  const posicao = absolutePosition();
+  scrub.max = timeline.total;
+  // Durante o arraste a barra pertence ao usuário: sobrescrever aqui faria o
+  // controle "pular de volta" a cada timeupdate.
+  if (!scrubbing) scrub.value = posicao;
+
+  // A linha de tempo cobre só o que JÁ foi sintetizado. Enquanto faltam trechos,
+  // dizer "7:48:00" seria mentira: o total mostrado é do que existe, e o aviso
+  // de parcial fica explícito.
+  const parcial = totalChunks !== null && chunks.length < totalChunks;
+  writeReadout(
+    posicao,
+    parcial ? ` do que está pronto (${chunks.length} de ${totalChunks} trechos)` : ""
+  );
+}
+
+// Pula para um segundo absoluto do livro, trocando de trecho se preciso. É o que
+// faz o scrub e o ±15 s atravessarem a fronteira de chunk.
+function seekAbsolute(absolute) {
+  if (chunks.length === 0) return;
+  const alvo = Timeline.locate(timeline, absolute);
+  if (alvo.index === currentIndex) {
+    audioPlayer.currentTime = alvo.offset;
+    renderTimeline();
+    savePositionAfterNavigation();
+    return;
+  }
+  // Atravessou a fronteira: troca a src preservando se estava tocando ou pausado.
+  playChunk(alvo.index, alvo.offset, !audioPlayer.paused);
+  savePositionAfterNavigation();
+}
+
 function renderPositionIndicator() {
   if (currentSequence === null || chunks.length === 0) {
     positionIndicator.hidden = true;
@@ -519,8 +601,15 @@ async function refreshBooksList() {
   }
 }
 
+// `since` corta o payload do polling: sem ele, um livro de 533 chunks reenviava
+// 51,8 KB a cada 2 s (91 MB por hora) para um delta quase sempre de 0 ou 1 chunk.
+// Timeline.nextSince devolve null quando a faixa conhecida tem buraco — aí pede
+// tudo, porque perder um trecho é pior que gastar banda.
 async function fetchAudioChunks(bookId) {
-  const response = await fetch(`/books/${bookId}/audio`);
+  const since = Timeline.nextSince(chunks);
+  const url =
+    since === null ? `/books/${bookId}/audio` : `/books/${bookId}/audio?since=${since}`;
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error("Falha ao buscar áudio");
   }
@@ -595,6 +684,10 @@ function mergeChunks(fetched) {
   }
   // Trecho seguinte pode ter acabado de ser sintetizado: destrava "Próximo".
   updateNavButtons();
+  // A linha de tempo cresce junto: total e restante mudam a cada trecho novo.
+  rebuildTimeline();
+  // O trecho seguinte pode ter ficado pronto agora — vale aquecer o cache dele.
+  preloadNext(currentIndex);
   return added.length;
 }
 
@@ -728,7 +821,10 @@ function togglePlayPause() {
   }
 }
 
-function playChunk(index, startTime) {
+// `autoplay` existe por causa do scrub (OS-057): arrastar a barra com o áudio
+// pausado não pode começar a tocar sozinho. Padrão true — navegação por trecho,
+// retomada e fim de trecho continuam tocando como antes.
+function playChunk(index, startTime, autoplay = true) {
   if (index < 0 || index >= chunks.length) return;
   currentIndex = index;
   currentSequence = chunks[index].sequence;
@@ -744,11 +840,37 @@ function playChunk(index, startTime) {
     if (startTime) {
       audioPlayer.currentTime = startTime;
     }
-    audioPlayer.play();
+    if (autoplay) audioPlayer.play();
+    renderTimeline();
     audioPlayer.removeEventListener("loadedmetadata", onLoaded);
   };
   audioPlayer.addEventListener("loadedmetadata", onLoaded);
   audioPlayer.load();
+  renderTimeline();
+  preloadNext(index);
+}
+
+// Aquece o cache do trecho seguinte enquanto o corrente toca.
+//
+// Antes disto, o `ended` chamava playChunk, que só então começava a baixar: uma
+// lacuna de rede + decode a cada ~53 s, ~533 vezes por livro — enquanto as OS-045
+// e OS-056 calibravam pausas de 420-520 ms para não produzir emenda audível.
+//
+// Isto ENCURTA a lacuna (a resposta vem do cache do navegador), não a elimina:
+// gapless de verdade exige MediaSource/Web Audio, e está fora do escopo da OS-057.
+function preloadNext(index) {
+  const proximo = index + 1;
+  if (proximo >= chunks.length) {
+    preloader = null;
+    return;
+  }
+  const url = chunks[proximo].url;
+  if (preloader && preloader.dataset.url === url) return;
+  preloader = new Audio();
+  preloader.dataset.url = url;
+  preloader.preload = "auto";
+  preloader.src = url;
+  preloader.load();
 }
 
 function resetPlaybackState() {
@@ -758,6 +880,10 @@ function resetPlaybackState() {
   audioPlayer.load();
   chunks = [];
   currentIndex = 0;
+  // Sem isto a barra guardaria o total do livro anterior ao abrir outro.
+  timeline = Timeline.build([]);
+  scrubbing = false;
+  preloader = null;
   currentSequence = null;
   currentBookTitle = null;
   playbackStarted = false;
@@ -767,6 +893,7 @@ function resetPlaybackState() {
   chapters = [];
   totalChunks = null;
   updateNavButtons();
+  renderTimeline();
   resumeBanner.hidden = true;
   synthesisProgress.hidden = true;
   costWarning.hidden = true;
@@ -862,6 +989,27 @@ prevBtn.addEventListener("click", goToPrevious);
 nextBtn.addEventListener("click", goToNext);
 playPauseBtn.addEventListener("click", togglePlayPause);
 
+// Enquanto arrasta: a leitura de tempo acompanha o dedo, mas o áudio NÃO é
+// reposicionado a cada pixel — seria uma troca de src por movimento.
+scrub.addEventListener("input", () => {
+  scrubbing = true;
+  writeReadout(Number(scrub.value), "");
+});
+
+// Ao soltar: aí sim pula, trocando de trecho se a posição caiu em outro.
+scrub.addEventListener("change", () => {
+  scrubbing = false;
+  seekAbsolute(Number(scrub.value));
+});
+
+back15Btn.addEventListener("click", () => {
+  seekAbsolute(absolutePosition() - SKIP_SECONDS);
+});
+
+forward15Btn.addEventListener("click", () => {
+  seekAbsolute(absolutePosition() + SKIP_SECONDS);
+});
+
 speedSelect.addEventListener("change", () => {
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
 });
@@ -887,6 +1035,9 @@ document.addEventListener("keydown", (event) => {
 });
 
 audioPlayer.addEventListener("timeupdate", () => {
+  // A barra do livro anda com o áudio; o throttle abaixo é só da GRAVAÇÃO de
+  // posição, que continua como estava (OS-028).
+  renderTimeline();
   if (currentBookId && chunks.length > 0) {
     saveState(
       currentBookId,
