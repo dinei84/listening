@@ -11,8 +11,6 @@ Todos os testes injetam a criação de processo: nenhum servidor sobe aqui.
 
 import sys
 
-import pytest
-
 from scripts import run_app
 
 
@@ -48,7 +46,12 @@ class FakeProcess:
 
 
 def _supervisor(processos=None, **kwargs):
-    """Monta um supervisor com spawn falso e sem dormir de verdade."""
+    """Monta um supervisor com spawn falso e sem dormir de verdade.
+
+    Sem `processos`, os falsos nascem JÁ ENCERRADOS (código 0): o supervisor roda
+    até o primeiro morto, e um processo que nunca morre com `sleep` no-op gira o
+    laço para sempre — foi o que travou a primeira versão destes testes.
+    """
     criados = []
 
     def spawn(argv):
@@ -57,7 +60,7 @@ def _supervisor(processos=None, **kwargs):
             processo = processos[indice]
             processo.argv = argv
         else:
-            processo = FakeProcess(argv)
+            processo = FakeProcess(argv, exit_code=0)
         criados.append(processo)
         return processo
 
@@ -99,7 +102,9 @@ def test_build_processes_runs_uvicorn_and_the_worker_module():
 
 
 def test_build_processes_honours_host_and_port():
-    api = next(s for s in run_app.build_processes(host="0.0.0.0", port=9001) if s.name == "API")
+    api = next(
+        s for s in run_app.build_processes(host="0.0.0.0", port=9001) if s.name == "API"
+    )
     assert "0.0.0.0" in api.argv
     assert "9001" in api.argv
 
@@ -117,9 +122,9 @@ def test_build_processes_defaults_match_the_runbook():
 
 def test_supervisor_starts_every_process():
     sup, criados, _ = _supervisor()
-    # Os dois morrem de imediato para o laço não girar para sempre.
     sup.run()
     assert len(criados) == 2
+    assert {p.argv[0] for p in criados} == {sys.executable}
 
 
 def test_supervisor_stops_the_others_when_one_exits():
@@ -127,7 +132,7 @@ def test_supervisor_stops_the_others_when_one_exits():
     impedir: manter o worker vivo sem API reproduziria o problema de 13/08."""
     api = FakeProcess(None)
     worker = FakeProcess(None)
-    sup, criados, _ = _supervisor([api, worker])
+    sup, _criados, _ = _supervisor([api, worker])
 
     api.morrer(1)
     sup.run()
