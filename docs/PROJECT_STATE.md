@@ -205,6 +205,20 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
     Ligar as FKs resolveria a classe inteira, mas muda o comportamento de **toda** escrita do projeto — inserção fora de ordem passa a falhar em vez de passar — e exigiria revisar cada caminho de insert e delete, incluindo os da `SQLiteJobQueue`. É OS própria, com risco próprio, e não cabia dentro da OS-060. Mitigação em vigor enquanto isso: a varredura de órfãos no `init_db`, que hoje cobre só `chapters`.
 
+65. **MVP redefinido pelo dono em 29/09/2026: ouvir no celular, longe de casa** — não existem usuários; o dono é o primeiro, montando um MVP antes de planejar o produto. Isso reordena o backlog inteiro.
+
+    **Sai do caminho crítico:** itens 63 (autenticação e rate limit — protegem contra outras pessoas, e não há outras pessoas; a trava da OS-042 já pergunta antes de gastar), 59 (planos), 62 (dedup) e 64 (foreign keys). Nenhum impede ouvir um livro na rua.
+
+    **Entra:** o entregável é **um arquivo no telefone**, não uma página web. PWA offline foi descartado — 1,8 GB por livro, cota e sincronização, para entregar o mesmo que um arquivo entrega, e player nativo dá retomada e navegação por capítulo de graça. **Entregue pela OS-062** (`scripts/export_book.py`, M4B com capítulos, 6,5× menor medido). Consequência honesta: parte da OS-058 (`mediaSession`, manifest) serve ouvir **no nosso player**, não no app nativo do telefone — não é trabalho perdido, mas não era a resposta para mobilidade.
+
+    **O caminho crítico agora:** (1) rodar um livro inteiro de verdade — todo número que temos sobre livro completo veio de *contar sobre o texto*, nunca de sintetizar, e o maior áudio que existiu tem **2m27s**; (2) exportar (feito); (3) o dono ouvir na rua, por horas. O passo 3 é o teste do MVP e responde a pergunta aberta desde a OS-056: **32 trocas de voz ao longo de horas incomodam?** A amostra aprovada tinha 2 trocas em 2m27s.
+
+66. **O driver da GPU não está carregado, e a síntese fica 14× mais lenta (medido em 29/09/2026)** — `nvidia-smi` falha ("couldn't communicate with the NVIDIA driver"), não há `/dev/nvidia*` e `torch.cuda.is_available()` é `False`. Provável atualização de kernel sem reboot; a máquina está em `7.0.0-34-generic`.
+
+    **Impacto medido**, sintetizando um chunk real de 1.001 caracteres: **18,48 s/chunk na CPU contra 1,34 s/chunk na GPU** (linha de base da OS-031). Para os 645 chunks de "O Programador Pragmático", **~3,3 h em vez de ~15 min**. O custo em dólar não muda — só o tempo de parede. Resolver é reboot, decisão do dono.
+
+    De passagem, esta medição deu o número que faltava para dimensionar o áudio: **1.001 caracteres → 61,0 s de fala**, o que põe o livro em ~10,9 h.
+
 ## 6. Riscos e bloqueios conhecidos
 
 - **Pendente (OS-041, decisão do dono de 2026-08-06): credenciais de TTS cloud para fechar o spike do nível premium.** O spike rodou sem chamadas pagas (opção 2 escolhida pelo dono): preços oficiais levantados, script pronto e baseline Kokoro sintetizado, mas a qualidade de voz em pt-BR — o critério decisivo do premium — **não foi ouvida** porque nenhuma credencial existe no ambiente. Para concluir: exportar as env vars do `scripts/spike_tts_cloud.py` (5 listadas no cabeçalho) e aprovar o orçamento pequeno (~12 chamadas de teste, centavos por provedor). Número para dimensionar (levantado 2026-08-06): livro técnico típico custa **US$ 8–16** nos patamares baratos (OpenAI tts-1 US$15/1M chars; Google Neural2 e Polly neural US$16/1M) e **US$ 16–20** no Chirp 3 HD / Polly generative / tts-1-hd (US$30/1M); **ElevenLabs é ~10× mais cara** (créditos, ~US$165/1M no plano Pro) — provavelmente fora do páreo antes da audição. OpenAI `gpt-4o-mini-tts` é o único com controle de emoção/ritmo via instrução (relevante à decisão #23) mas cobra por token, não por caractere — precisa de medição tokens/caractere para fechar custo.
