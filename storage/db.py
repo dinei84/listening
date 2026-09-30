@@ -1,7 +1,10 @@
+import logging
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
 from core.models import Book, Chapter
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DB_PATH = "books.db"
 
@@ -132,9 +135,31 @@ def init_db(db_path: str | None = None) -> None:
                 beat_at TEXT NOT NULL
             )
             """)
+        # Depois dos CREATE TABLE: em banco novo as tabelas precisam existir antes.
+        removidos = sweep_orphan_chapters(conn)
+        if removidos:
+            logger.info(
+                "Removidos %d capítulo(s) órfão(s) de livros já apagados (OS-060)",
+                removidos,
+            )
         conn.commit()
     finally:
         conn.close()
+
+
+def sweep_orphan_chapters(conn) -> int:
+    """Remove capítulos cujo livro não existe mais e devolve quantas linhas apagou.
+
+    Restrita ao que é provadamente inalcançável: todo consumidor busca capítulo
+    por `book_id`, então linha com `book_id` que não está em `books` não tem como
+    ser lida por ninguém. É o lixo que o `delete_book` acumulou antes da OS-060 —
+    sem impacto funcional, mas polui qualquer diagnóstico feito no banco, que foi
+    justamente o que atrapalhou a investigação que originou o item 58.
+    """
+    cursor = conn.execute(
+        "DELETE FROM chapters WHERE book_id NOT IN (SELECT id FROM books)"
+    )
+    return cursor.rowcount or 0
 
 
 def record_worker_heartbeat(
@@ -292,9 +317,14 @@ def update_book_status(
 
 
 def delete_book(book_id: str, db_path: str | None = None) -> None:
-    """Remove a linha de um Book existente. Nenhum efeito se o book_id não existir."""
+    """Remove um Book e os capítulos dele. Nenhum efeito se o book_id não existir."""
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
+        # Os capítulos vão junto (OS-060): a tabela entrou na OS-027 e este
+        # caminho nunca foi atualizado, deixando lixo a cada livro apagado — 94
+        # de 95 linhas órfãs no banco local em 29/09/2026. Não há foreign key nem
+        # ON DELETE CASCADE no schema segurando isso por baixo.
+        conn.execute("DELETE FROM chapters WHERE book_id = ?", (book_id,))
         conn.execute("DELETE FROM books WHERE id = ?", (book_id,))
         conn.commit()
     finally:
