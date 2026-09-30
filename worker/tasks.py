@@ -36,11 +36,27 @@ def process_job(job: Job) -> None:
         # OS-042: a estimativa acontece ANTES de qualquer chamada ao Speaker. A
         # extração já rodou acima, então o texto real está disponível aqui. O custo
         # do Kokoro (cost_per_char == 0.0) dá zero e segue o fluxo antigo sem fricção.
-        estimate = sum(
-            pipeline.estimate_cost(chapter.text, normalize=book.normalize_text)
-            for chapter in chapters
+        # `start=` é obrigatório: sum() começa em int 0, e CostBreakdown não soma
+        # com inteiro.
+        divisao = sum(
+            (
+                pipeline.estimate_breakdown(chapter.text, normalize=book.normalize_text)
+                for chapter in chapters
+            ),
+            pipeline.EMPTY_BREAKDOWN,
         )
+        estimate = divisao.total
         db.set_book_estimated_cost(job.book_id, estimate)
+        # A divisão é gravada AQUI, junto com a estimativa: o livro pode parar em
+        # pending_confirmation logo abaixo, e nesse momento o chunk_total ainda
+        # não existe (só é gravado depois da confirmação). Sem isto, o banner
+        # teria o número e nada que o sustente.
+        db.set_book_cost_breakdown(
+            job.book_id,
+            premium_cost=divisao.premium_cost,
+            premium_chunks=divisao.premium_chunks,
+            estimated_chunks=divisao.total_chunks,
+        )
 
         cap = cfg.max_cost_per_book
         if estimate > 0 and cap is not None and estimate > cap:

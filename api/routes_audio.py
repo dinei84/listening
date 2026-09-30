@@ -32,6 +32,10 @@ async def list_book_audio(
             # para o player mapear trecho → capítulo sem uma chamada extra.
             "chapter_id": chunk.chapter_id,
             "duration_seconds": chunk.duration_seconds,
+            # OS-059: gravado desde sempre e nunca exposto. Sem ele, o roteamento
+            # por expressividade — o diferencial do produto — é invisível, e a
+            # pergunta "está mesmo consumindo da API key?" não tem resposta.
+            "engine_used": chunk.engine_used,
             "url": f"/books/{book_id}/audio/{chunk.sequence}",
         }
         for chunk in chunks

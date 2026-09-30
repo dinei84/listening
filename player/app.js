@@ -103,6 +103,9 @@ const costWarning = document.getElementById("cost-warning");
 const confirmCostBanner = document.getElementById("confirm-cost-banner");
 const confirmCostBtn = document.getElementById("confirm-cost-btn");
 const positionIndicator = document.getElementById("position-indicator");
+const engineIndicator = document.getElementById("engine-indicator");
+const engineSummary = document.getElementById("engine-summary");
+const costBreakdown = document.getElementById("cost-breakdown");
 const chaptersSection = document.getElementById("chapters-section");
 const chaptersList = document.getElementById("chapters-list");
 const audioPlayer = document.getElementById("audio-player");
@@ -444,6 +447,78 @@ function setupMediaSession() {
   }
 }
 
+// Qual motor narrou o trecho que está tocando, e o balanço do livro. Sem isto,
+// o roteamento por expressividade — o diferencial do produto, decidido a cada
+// chunk — não tem nenhuma superfície: `engine_used` era gravado e nunca saía do
+// banco (achado 2.4 do estudo de UI/UX).
+// Detalha o que sustenta o número do banner. Antes desta OS ele dizia só "este
+// livro deve custar US$ X" e calava sobre de onde o valor vem — o usuário
+// confirmava um número sem entender por que ele é baixo.
+function renderCostBreakdown(statusData) {
+  const total = statusData.estimated_cost;
+  const premium = statusData.estimated_premium_cost;
+  const trechosPagos = statusData.premium_chunk_count;
+  const trechosTotais = statusData.estimated_chunk_count;
+
+  const partes = [`Custo estimado: ${formatEstimate(total)}.`];
+
+  // null é "nunca estimado", diferente de 0 ("medido e deu nada"): livro antigo,
+  // gravado antes desta OS, não pode fingir que tem a divisão.
+  if (premium !== null && premium !== undefined && trechosTotais) {
+    if (trechosPagos > 0) {
+      // toLocaleString, e não toFixed: o resto da linha usa vírgula decimal
+      // ("US$ 0,85"), e um "9.1%" com ponto ao lado disso é erro visível.
+      const porcento = ((trechosPagos / trechosTotais) * 100).toLocaleString(
+        "pt-BR",
+        { minimumFractionDigits: 1, maximumFractionDigits: 1 }
+      );
+      partes.push(
+        `${trechosPagos} de ${trechosTotais} trechos (${porcento}%) vão para a ` +
+          `voz premium, a ${formatEstimate(premium)}.`
+      );
+      partes.push(
+        `Os outros ${trechosTotais - trechosPagos} ficam na voz local, que não custa nada.`
+      );
+    } else {
+      partes.push("Nenhum trecho vai para a voz premium neste livro.");
+    }
+  }
+
+  costBreakdown.textContent = partes.join(" ");
+}
+
+function renderEngineInfo() {
+  const atual = chunks[currentIndex];
+  if (!atual || !atual.engine_used) {
+    engineIndicator.hidden = true;
+  } else {
+    engineIndicator.innerHTML = "";
+    engineIndicator.appendChild(document.createTextNode("Narrado com "));
+    const marca = document.createElement("span");
+    marca.className = Engines.isPaid(atual.engine_used)
+      ? "marca-motor pago"
+      : "marca-motor";
+    marca.textContent = Engines.label(atual.engine_used);
+    engineIndicator.appendChild(marca);
+    engineIndicator.hidden = false;
+  }
+
+  const resumo = Engines.summarize(chunks);
+  // Um motor só é o caso normal de quem não usa roteamento: anunciar "2 de 2
+  // trechos com voz local" é ruído sobre uma escolha que o usuário não fez.
+  if (resumo.length < 2) {
+    engineSummary.hidden = true;
+    return;
+  }
+  const total = resumo.reduce((soma, linha) => soma + linha.count, 0);
+  engineSummary.textContent =
+    "Neste livro: " +
+    resumo
+      .map((linha) => `${linha.count} de ${total} trechos com ${linha.label}`)
+      .join(" · ");
+  engineSummary.hidden = false;
+}
+
 function renderPositionIndicator() {
   if (currentSequence === null || chunks.length === 0) {
     positionIndicator.hidden = true;
@@ -726,10 +801,9 @@ function renderSynthesisProgress(status, chunksDone, chunksTotal) {
 
 function statusMessage(status, chunksDone, chunksTotal, statusData) {
   if (status === "pending_confirmation") {
-    const custo = statusData && statusData.estimated_cost;
-    return `Aguardando confirmação de custo — este livro deve custar ${
-      custo ? formatEstimate(custo) : "?"
-    }.`;
+    // O valor e a divisão ficam no banner logo abaixo (OS-059); repeti-los aqui
+    // mostrava o mesmo número duas vezes na mesma tela.
+    return "Aguardando confirmação de custo.";
   }
   if (status === "paused") {
     return chunks.length > 0
@@ -771,6 +845,8 @@ function mergeChunks(fetched) {
   updateNavButtons();
   // A linha de tempo cresce junto: total e restante mudam a cada trecho novo.
   rebuildTimeline();
+  // O balanço entre motores muda com cada trecho sintetizado.
+  renderEngineInfo();
   // O trecho seguinte pode ter ficado pronto agora — vale aquecer o cache dele.
   preloadNext(currentIndex);
   return added.length;
@@ -815,6 +891,7 @@ async function pollBook(bookId) {
   // Trava de custo (OS-042): livro em espera mostra a estimativa + botão de
   // confirmar; livro degradado por teto mostra o aviso.
   confirmCostBanner.hidden = bookStatus !== "pending_confirmation";
+  if (!confirmCostBanner.hidden) renderCostBreakdown(statusData);
   costWarning.hidden = !(
     bookStatus === "ready" && statusData.cost_degraded
   );
@@ -917,6 +994,7 @@ function playChunk(index, startTime, autoplay = true) {
   // O capítulo em foco e a posição mudam a cada troca de trecho (OS-029).
   renderChapters();
   renderPositionIndicator();
+  renderEngineInfo();
   updateNavButtons();
   audioPlayer.src = chunks[index].url;
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
@@ -985,6 +1063,8 @@ function resetPlaybackState() {
   costWarning.hidden = true;
   confirmCostBanner.hidden = true;
   positionIndicator.hidden = true;
+  engineIndicator.hidden = true;
+  engineSummary.hidden = true;
   chaptersSection.hidden = true;
   chaptersList.innerHTML = "";
 }

@@ -5,6 +5,7 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from itertools import pairwise
 
 import fitz
@@ -227,30 +228,92 @@ def count_text_chunks(text: str, max_chars: int | None = None) -> int:
     return len(chunks)
 
 
-def estimate_cost(text: str, normalize: bool = False) -> float:
-    """Estima o custo de processar o texto, a partir do texto real (sanitizado, como a síntese o recebe): caracteres × cost_per_char do Speaker, mais o do TextNormalizer quando o livro optou por normalizar (OS-038) — sem isso o nível médio escaparia da trava de custo da OS-042."""
+@dataclass(frozen=True)
+class CostBreakdown:
+    """Divisão da estimativa de custo entre motor pago, motor local e normalizador (OS-059).
+
+    Existe porque o banner de confirmação dizia "este livro deve custar US$ 0,85"
+    e calava sobre o que sustenta o número. O `total` é exatamente o que
+    `estimate_cost` sempre devolveu — a trava de custo da OS-042 compara esse
+    número com o teto, então mudá-lo seria mudar a decisão de gastar.
+    """
+
+    total: float
+    premium_cost: float
+    local_cost: float
+    normalizer_cost: float
+    premium_chunks: int
+    local_chunks: int
+    routing_enabled: bool
+
+    @property
+    def total_chunks(self) -> int:
+        """Total de chunks previstos para o texto estimado."""
+        return self.premium_chunks + self.local_chunks
+
+    def __add__(self, outro: "CostBreakdown") -> "CostBreakdown":
+        """Soma duas divisões — o worker estima capítulo a capítulo e precisa acumular."""
+        return CostBreakdown(
+            total=self.total + outro.total,
+            premium_cost=self.premium_cost + outro.premium_cost,
+            local_cost=self.local_cost + outro.local_cost,
+            normalizer_cost=self.normalizer_cost + outro.normalizer_cost,
+            premium_chunks=self.premium_chunks + outro.premium_chunks,
+            local_chunks=self.local_chunks + outro.local_chunks,
+            # Roteamento é config global: basta um lado ter visto ligado.
+            routing_enabled=self.routing_enabled or outro.routing_enabled,
+        )
+
+
+EMPTY_BREAKDOWN = CostBreakdown(0.0, 0.0, 0.0, 0.0, 0, 0, False)
+
+
+def estimate_breakdown(text: str, normalize: bool = False) -> CostBreakdown:
+    """Estima o custo do texto e devolve a divisão entre motor pago, motor local e normalizador."""
     text = sanitize_text(text)
     cfg = config_module.load_config()
     speaker = registry_module.SPEAKERS[cfg.speaker]()
-    # OS-056: com roteamento ligado, cada chunk é cobrado pelo motor que de fato vai
-    # sintetizá-lo. Cobrar o livro inteiro no preço do pago inflaria a estimativa em
-    # ~10x, e o usuário recusaria um custo que não existe.
-    premium = _premium_speaker(cfg) if getattr(cfg, "routing_enabled", False) else None
-    if premium is not None:
-        custo = sum(
-            len(pedaco)
-            * (
-                premium if _should_route_to_premium(pedaco, cfg) else speaker
-            ).cost_per_char
-            for pedaco in chunk_text(text)
-        )
-    else:
-        custo = len(text) * speaker.cost_per_char
+    routing = bool(getattr(cfg, "routing_enabled", False))
+    premium = _premium_speaker(cfg) if routing else None
+
+    premium_cost = 0.0
+    local_cost = 0.0
+    premium_chunks = 0
+    local_chunks = 0
+
+    for pedaco in chunk_text(text):
+        if premium is not None and _should_route_to_premium(pedaco, cfg):
+            premium_cost += len(pedaco) * premium.cost_per_char
+            premium_chunks += 1
+        else:
+            local_cost += len(pedaco) * speaker.cost_per_char
+            local_chunks += 1
+
+    # O normalizador é um passe de LLM sobre o texto, não síntese: atribuí-lo a um
+    # dos motores faria a tela dizer que a voz local custa dinheiro.
+    normalizer_cost = 0.0
     if normalize:
         normalizer = _build_normalizer(cfg)
         if normalizer is not None:
-            custo += len(text) * normalizer.cost_per_char
-    return custo
+            normalizer_cost = len(text) * normalizer.cost_per_char
+
+    return CostBreakdown(
+        total=premium_cost + local_cost + normalizer_cost,
+        premium_cost=premium_cost,
+        local_cost=local_cost,
+        normalizer_cost=normalizer_cost,
+        premium_chunks=premium_chunks,
+        local_chunks=local_chunks,
+        routing_enabled=routing,
+    )
+
+
+def estimate_cost(text: str, normalize: bool = False) -> float:
+    """Estima o custo de processar o texto, a partir do texto real (sanitizado, como a síntese o recebe): caracteres × cost_per_char do Speaker, mais o do TextNormalizer quando o livro optou por normalizar (OS-038) — sem isso o nível médio escaparia da trava de custo da OS-042."""
+    # Delega para estimate_breakdown (OS-059): um único lugar calcula, e o total
+    # continua sendo exatamente o mesmo número que a trava da OS-042 compara com
+    # o teto max_cost_per_book.
+    return estimate_breakdown(text, normalize=normalize).total
 
 
 def _split_by_char_limit(text: str, limit: int | None) -> list[str]:

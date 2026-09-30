@@ -81,10 +81,16 @@ def test_audio_endpoint_since_at_head_returns_empty(client, tmp_path):
 
 def test_audio_endpoint_since_keeps_full_payload_shape(client, tmp_path):
     """O delta precisa ter os mesmos campos do payload cheio: o cliente usa o
-    mesmo mergeChunks para os dois."""
+    mesmo mergeChunks para os dois.
+
+    Compara delta contra payload cheio em vez de fixar a lista de campos: a
+    versão original travava os quatro campos de então e quebrou quando a OS-059
+    acrescentou `engine_used` aos DOIS — uma mudança que este teste deveria
+    aprovar, não reprovar."""
     book_id = _livro_com_chunks(tmp_path, 3)
-    item = client.get(f"/books/{book_id}/audio", params={"since": 1}).json()[0]
-    assert set(item) == {"sequence", "chapter_id", "duration_seconds", "url"}
+    cheio = client.get(f"/books/{book_id}/audio").json()
+    delta = client.get(f"/books/{book_id}/audio", params={"since": 1}).json()
+    assert set(delta[0]) == set(cheio[0])
 
 
 def test_audio_endpoint_negative_since_is_rejected(client, tmp_path):

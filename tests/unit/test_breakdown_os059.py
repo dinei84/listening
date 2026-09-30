@@ -12,9 +12,9 @@ import pytest
 
 from core import config as config_module
 from core import pipeline
+from plugins import registry as registry_module
 from storage import db
 from tests.unit.test_routing import FakeConfig, FakeSpeaker
-from plugins import registry as registry_module
 
 # Chunk com 3 frases expressivas: no limiar 3, vai para o pago.
 EXPRESSIVO = "Que beleza! Será mesmo? Não acredito! " * 30
@@ -58,7 +58,16 @@ def test_breakdown_total_matches_estimate_cost(monkeypatch, motores, texto):
 
 
 def test_breakdown_total_matches_with_normalizer(monkeypatch, motores):
-    _config(monkeypatch, routing_enabled=True, normalizer_cost_per_char=1.2e-06)
+    """`normalizer="llm"` é obrigatório: com "noop" o `_build_normalizer` devolve
+    None, o custo do normalizador fica 0 dos dois lados e a asserção passa sem
+    exercitar nada — foi o que aconteceu na primeira versão deste teste."""
+    _config(
+        monkeypatch,
+        routing_enabled=True,
+        normalizer="llm",
+        normalizer_cost_per_char=1.2e-06,
+    )
+    assert pipeline.estimate_breakdown(EXPRESSIVO, normalize=True).normalizer_cost > 0
     assert pipeline.estimate_breakdown(
         EXPRESSIVO, normalize=True
     ).total == pytest.approx(pipeline.estimate_cost(EXPRESSIVO, normalize=True))
@@ -106,18 +115,23 @@ def test_breakdown_costs_add_up(monkeypatch, motores):
         monkeypatch,
         routing_enabled=True,
         routing_min_expressive=3,
+        normalizer="llm",
         normalizer_cost_per_char=1.2e-06,
     )
     d = pipeline.estimate_breakdown(EXPRESSIVO + "\n\n" + NEUTRO, normalize=True)
+    assert d.normalizer_cost > 0
     assert d.premium_cost + d.local_cost + d.normalizer_cost == pytest.approx(d.total)
 
 
-def test_breakdown_normalizer_cost_is_not_attributed_to_an_engine(
-    monkeypatch, motores
-):
+def test_breakdown_normalizer_cost_is_not_attributed_to_an_engine(monkeypatch, motores):
     """O normalizador é um passe de LLM sobre o texto, não síntese: atribuí-lo a
     um dos motores faria a tela dizer que a voz local custa dinheiro."""
-    _config(monkeypatch, routing_enabled=True, normalizer_cost_per_char=1.2e-06)
+    _config(
+        monkeypatch,
+        routing_enabled=True,
+        normalizer="llm",
+        normalizer_cost_per_char=1.2e-06,
+    )
     sem = pipeline.estimate_breakdown(NEUTRO, normalize=False)
     com = pipeline.estimate_breakdown(NEUTRO, normalize=True)
     assert com.normalizer_cost > 0

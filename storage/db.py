@@ -62,7 +62,10 @@ def init_db(db_path: str | None = None) -> None:
                 estimated_cost REAL,
                 cost_confirmed INTEGER NOT NULL DEFAULT 0,
                 cost_degraded INTEGER NOT NULL DEFAULT 0,
-                normalize_text INTEGER NOT NULL DEFAULT 0
+                normalize_text INTEGER NOT NULL DEFAULT 0,
+                estimated_premium_cost REAL,
+                premium_chunk_count INTEGER,
+                estimated_chunk_count INTEGER
             )
             """)
         # Migração de schema (OS-052): `CREATE TABLE IF NOT EXISTS` cria tabela
@@ -92,6 +95,18 @@ def init_db(db_path: str | None = None) -> None:
             "books",
             "cost_degraded",
             "cost_degraded INTEGER NOT NULL DEFAULT 0",
+        )
+        # Divisão da estimativa (OS-059). Sem DEFAULT de propósito: em livro
+        # antigo elas ficam NULL, que é "nunca foi estimado" — e é diferente de
+        # 0, que a tela leria como "medido e deu nada".
+        ensure_column(
+            conn, "books", "estimated_premium_cost", "estimated_premium_cost REAL"
+        )
+        ensure_column(
+            conn, "books", "premium_chunk_count", "premium_chunk_count INTEGER"
+        )
+        ensure_column(
+            conn, "books", "estimated_chunk_count", "estimated_chunk_count INTEGER"
         )
         # `order` é palavra reservada no SQL, daí a coluna se chamar chapter_order.
         # O texto do capítulo NÃO é persistido: seria o livro inteiro duplicado no
@@ -194,7 +209,7 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         row = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text, estimated_premium_cost, premium_chunk_count, estimated_chunk_count "
             "FROM books WHERE id = ?",
             (book_id,),
         ).fetchone()
@@ -218,6 +233,9 @@ def get_book(book_id: str, db_path: str | None = None) -> Book | None:
         cost_confirmed=bool(row[10]),
         cost_degraded=bool(row[11]),
         normalize_text=bool(row[12]),
+        estimated_premium_cost=row[13],
+        premium_chunk_count=row[14],
+        estimated_chunk_count=row[15],
     )
 
 
@@ -226,7 +244,7 @@ def list_books(db_path: str | None = None) -> list[Book]:
     conn = sqlite3.connect(_resolve_path(db_path))
     try:
         rows = conn.execute(
-            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text "
+            "SELECT id, title, original_filename, status, created_at, error_message, chunk_total, language, voice, estimated_cost, cost_confirmed, cost_degraded, normalize_text, estimated_premium_cost, premium_chunk_count, estimated_chunk_count "
             "FROM books ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -247,6 +265,9 @@ def list_books(db_path: str | None = None) -> list[Book]:
             cost_confirmed=bool(row[10]),
             cost_degraded=bool(row[11]),
             normalize_text=bool(row[12]),
+            estimated_premium_cost=row[13],
+            premium_chunk_count=row[14],
+            estimated_chunk_count=row[15],
         )
         for row in rows
     ]
@@ -333,6 +354,26 @@ def set_book_cost_degraded(
         conn.execute(
             "UPDATE books SET cost_degraded = ? WHERE id = ?",
             (int(degraded), book_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def set_book_cost_breakdown(
+    book_id: str,
+    premium_cost: float,
+    premium_chunks: int,
+    estimated_chunks: int,
+    db_path: str | None = None,
+) -> None:
+    """Persiste a divisão da estimativa de custo de um Book (OS-059), calculada junto com a estimativa."""
+    conn = sqlite3.connect(_resolve_path(db_path))
+    try:
+        conn.execute(
+            "UPDATE books SET estimated_premium_cost = ?, premium_chunk_count = ?, "
+            "estimated_chunk_count = ? WHERE id = ?",
+            (premium_cost, premium_chunks, estimated_chunks, book_id),
         )
         conn.commit()
     finally:

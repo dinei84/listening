@@ -75,10 +75,13 @@
       <progress id="synthesis-progress" value="0" max="1" hidden></progress>
       <p id="player-status"></p>
       <p id="cost-warning" hidden></p>
-      <p id="confirm-cost-banner" hidden>
+      <div id="confirm-cost-banner" hidden>
+        <p id="cost-breakdown"></p>
         <button id="confirm-cost-btn" type="button">Confirmar custo estimado</button>
-      </p>
+      </div>
       <p id="position-indicator" hidden></p>
+      <p id="engine-indicator" hidden></p>
+      <p id="engine-summary" hidden></p>
 
       <p id="resume-banner" hidden>
         Retomar de onde parou?
@@ -132,6 +135,7 @@
     <!-- timeline.js primeiro: o app.js usa o Timeline ja no carregamento. -->
     <script src="timeline.js"></script>
     <script src="nowplaying.js"></script>
+    <script src="engines.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
