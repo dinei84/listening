@@ -25,9 +25,7 @@ def _chunk(sequence, chapter_id, duracao):
 
 
 def _capitulo(id_, titulo, ordem):
-    return Chapter(
-        id=id_, title=titulo, order=ordem, text="", start_page=1, end_page=2
-    )
+    return Chapter(id=id_, title=titulo, order=ordem, text="", start_page=1, end_page=2)
 
 
 # --------------------------------------------------------------------------
@@ -191,6 +189,26 @@ def test_build_command_maps_metadata_from_the_second_input():
     )
     assert "-map_metadata" in comando
     assert comando[comando.index("-map_metadata") + 1] == "1"
+
+
+def test_concat_list_makes_paths_absolute():
+    """O demuxer `concat` resolve caminho relativo contra o diretório da LISTA, e
+    a lista vive num temporário — não contra o CWD. Os `file_path` no banco são
+    relativos (`storage/audio/<id>/0.wav`), então sem absolutizar o ffmpeg
+    procura em `/tmp/tmpXXXX/storage/audio/...` e falha. Encontrado rodando de
+    verdade, depois de os testes com caminho absoluto passarem."""
+    relativo = _chunk(0, "c", 1.0).model_copy(
+        update={"file_path": "storage/audio/livro/0.wav"}
+    )
+    conteudo = export_book.build_concat_list([relativo])
+    caminho = conteudo.split("'")[1]
+    assert caminho.startswith("/"), conteudo
+    assert caminho.endswith("storage/audio/livro/0.wav")
+
+
+def test_concat_list_keeps_absolute_paths_untouched():
+    absoluto = _chunk(0, "c", 1.0).model_copy(update={"file_path": "/audio/x/0.wav"})
+    assert "'/audio/x/0.wav'" in export_book.build_concat_list([absoluto])
 
 
 def test_concat_list_quotes_paths_with_apostrophes():

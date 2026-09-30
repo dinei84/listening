@@ -60,6 +60,27 @@ Na primeira vez que o worker processar um livro, o Kokoro baixa os pesos do mode
 
 **Interromper o worker (Ctrl+C) no meio de um livro não perde o trabalho já feito** (desde a OS-022): ao subir de novo, ele devolve para a fila todo `Job` que ficou preso em `running` e continua a síntese a partir do primeiro chunk que ainda não foi persistido. Isso assume **um único worker rodando por vez** — se você subir dois, o segundo vai devolver para a fila o `Job` que o primeiro está processando de verdade.
 
+## 4.1 Exportar o livro para o celular (desde a OS-062)
+
+Depois que um livro fica `ready`, este comando junta os trechos num **arquivo
+único M4B** com marcadores de capítulo, pronto para copiar para o telefone e
+ouvir fora de casa — sem depender do notebook ligado:
+
+```bash
+venv/bin/python scripts/export_book.py <book_id>
+```
+
+O arquivo sai em `exports/` (mude com `--out`). Medido em 29/09/2026: **6,5× menor**
+que os `.wav` (4,9 MB → 776 KB numa amostra), então um livro técnico de ~11 h sai
+de ~1,8 GB para ~280 MB.
+
+Os capítulos detectados na extração viram marcadores de verdade, então qualquer
+app de audiolivro do celular dá navegação por capítulo e retomada de posição sem
+mais nenhum trabalho nosso.
+
+Exportar um livro que ainda não terminou funciona: sai o que já foi sintetizado,
+com aviso do status. Taxa maior, se quiser: `--bitrate 96k`.
+
 ## 5. Testar o fluxo completo pelo navegador
 
 1. Abrir `http://localhost:8000/` — é o player, servido como arquivo estático pela própria API.
