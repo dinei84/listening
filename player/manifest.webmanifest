@@ -1,0 +1,21 @@
+{
+  "name": "Audiobook Player",
+  "short_name": "Audiobook",
+  "description": "Ouça seus PDFs como audiolivro.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#1a1a1a",
+  "lang": "pt-BR",
+  "categories": ["books", "education"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -359,6 +359,91 @@ function seekAbsolute(absolute) {
   savePositionAfterNavigation();
 }
 
+// --------------------------------------------------------------------------
+// Tela bloqueada (OS-058)
+//
+// Um audiobook é ouvido caminhando, no carro e dormindo. Sem isto, pausar exige
+// desbloquear o telefone e achar a aba — que é o que separa demo de produto.
+// Tudo aqui é opcional por definição: navegador sem mediaSession não pode
+// derrubar o player, então cada acesso é guardado.
+// --------------------------------------------------------------------------
+
+function temMediaSession() {
+  return typeof navigator !== "undefined" && "mediaSession" in navigator;
+}
+
+// Atualiza o texto e a barra da tela bloqueada. Chamado a cada troca de trecho.
+function updateMediaSession() {
+  if (!temMediaSession()) return;
+
+  const meta = NowPlaying.build({
+    bookTitle: currentBookTitle,
+    chapter: currentSequence === null ? null : chapterOfSequence(currentSequence),
+    chapterCount: chapters.length,
+    chunkIndex: currentIndex,
+    chunkCount: totalChunks || chunks.length,
+  });
+
+  if (typeof MediaMetadata !== "undefined") {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: meta.title,
+      artist: meta.artist,
+      album: meta.album,
+      artwork: [{ src: "icon.svg", sizes: "any", type: "image/svg+xml" }],
+    });
+  }
+  updateMediaPositionState();
+}
+
+// A barra da tela bloqueada é a do LIVRO, não a do trecho: usa a linha de tempo
+// da OS-057, senão o sistema mostraria 53 s de duração num livro de 7,8 h.
+function updateMediaPositionState() {
+  if (!temMediaSession() || !navigator.mediaSession.setPositionState) return;
+  if (chunks.length === 0 || timeline.total <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: timeline.total,
+      playbackRate: audioPlayer.playbackRate || 1,
+      // Saturado: o sistema rejeita position > duration, e um arredondamento
+      // para cima no fim do último trecho bastaria para estourar.
+      position: Math.min(absolutePosition(), timeline.total),
+    });
+  } catch (err) {
+    // Alguns navegadores recusam combinações válidas em teoria; perder a barra
+    // da tela bloqueada não pode interromper a reprodução.
+  }
+}
+
+// Publicado para a verificação em navegador conseguir provar quais ações foram
+// de fato aceitas: a Media Session API não deixa ler os handlers de volta, e um
+// setActionHandler pode ser recusado por ação em alguns navegadores.
+let registeredMediaActions = [];
+
+function setupMediaSession() {
+  if (!temMediaSession()) return;
+  const acoes = [
+    ["play", () => audioPlayer.play()],
+    ["pause", () => audioPlayer.pause()],
+    ["previoustrack", goToPrevious],
+    ["nexttrack", goToNext],
+    // Os mesmos 15 s dos botões da tela: dois passos diferentes para a mesma
+    // intenção confundiriam quem usa os dois.
+    ["seekbackward", () => seekAbsolute(absolutePosition() - SKIP_SECONDS)],
+    ["seekforward", () => seekAbsolute(absolutePosition() + SKIP_SECONDS)],
+    // seekTime vem em segundos ABSOLUTOS do livro, que é a unidade que a
+    // setPositionState anunciou — por isso passa direto pelo seekAbsolute.
+    ["seekto", (detalhe) => seekAbsolute(detalhe.seekTime)],
+  ];
+  for (const [acao, handler] of acoes) {
+    try {
+      navigator.mediaSession.setActionHandler(acao, handler);
+      registeredMediaActions.push(acao);
+    } catch (err) {
+      // Ação não suportada neste navegador: ignora e segue com as outras.
+    }
+  }
+}
+
 function renderPositionIndicator() {
   if (currentSequence === null || chunks.length === 0) {
     positionIndicator.hidden = true;
@@ -848,6 +933,7 @@ function playChunk(index, startTime, autoplay = true) {
   audioPlayer.load();
   renderTimeline();
   preloadNext(index);
+  updateMediaSession();
 }
 
 // Aquece o cache do trecho seguinte enquanto o corrente toca.
@@ -1038,6 +1124,7 @@ audioPlayer.addEventListener("timeupdate", () => {
   // A barra do livro anda com o áudio; o throttle abaixo é só da GRAVAÇÃO de
   // posição, que continua como estava (OS-028).
   renderTimeline();
+  updateMediaPositionState();
   if (currentBookId && chunks.length > 0) {
     saveState(
       currentBookId,
@@ -1064,6 +1151,17 @@ audioPlayer.addEventListener("ended", () => {
   }
 });
 
+// O sistema precisa saber se está tocando para desenhar o botão certo na tela
+// bloqueada — sem isto, ele mostra "play" enquanto o áudio toca.
+audioPlayer.addEventListener("play", () => {
+  if (temMediaSession()) navigator.mediaSession.playbackState = "playing";
+  updateMediaPositionState();
+});
+
+audioPlayer.addEventListener("pause", () => {
+  if (temMediaSession()) navigator.mediaSession.playbackState = "paused";
+});
+
 resumeBtn.addEventListener("click", () => {
   resumeBanner.hidden = true;
   if (pendingResume) {
@@ -1080,6 +1178,7 @@ restartBtn.addEventListener("click", () => {
 });
 
 (function init() {
+  setupMediaSession();
   populateVoiceSelect();
   refreshBooksList();
   const saved = loadSavedState();
