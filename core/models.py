@@ -58,6 +58,12 @@ class Book(BaseModel):
     estimated_cost: float | None = None
     cost_confirmed: bool = False
     cost_degraded: bool = False
+    # Divisão da estimativa (OS-059): quanto do total é do motor pago e quantos
+    # trechos vão para ele. None = ainda não estimado — e None é diferente de 0,
+    # que significaria "medido e deu nada".
+    estimated_premium_cost: float | None = None
+    premium_chunk_count: int | None = None
+    estimated_chunk_count: int | None = None
     # Opt-in do nível médio (OS-038): normalizar o texto com LLM antes da síntese.
     normalize_text: bool = False
 

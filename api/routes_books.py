@@ -111,6 +111,11 @@ async def get_book_status(book_id: str) -> dict[str, str | int | None | float | 
         "estimated_cost": book.estimated_cost,
         "cost_confirmed": book.cost_confirmed,
         "cost_degraded": book.cost_degraded,
+        # Divisão da estimativa (OS-059). None quando o livro nunca foi estimado:
+        # zero significaria "medido e deu nada", que é outra coisa.
+        "estimated_premium_cost": book.estimated_premium_cost,
+        "premium_chunk_count": book.premium_chunk_count,
+        "estimated_chunk_count": book.estimated_chunk_count,
     }
     if book.status == "error":
         response["error_message"] = book.error_message

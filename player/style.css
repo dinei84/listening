@@ -281,3 +281,41 @@ label {
     transition: none !important;
   }
 }
+
+/* Transparência de motor (OS-059). O roteamento por expressividade é o
+   diferencial do produto e era invisível: `engine_used` era gravado e nunca
+   saía do banco. */
+#engine-indicator,
+#engine-summary {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+  color: var(--texto-fraco);
+}
+
+.marca-motor {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+/* O que custa fica visualmente distinto do que não custa: é a informação que
+   muda a decisão de confirmar. */
+.marca-motor.pago {
+  border-color: currentColor;
+  font-weight: 600;
+}
+
+#confirm-cost-banner {
+  background: var(--aviso-fundo);
+  border: 1px solid var(--aviso-borda);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+#cost-breakdown {
+  margin: 0.25rem 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--texto-fraco);
+}
