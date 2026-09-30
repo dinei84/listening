@@ -2,7 +2,7 @@
 
 **Data:** 29/09/2026
 **Branch:** `os/062-exportar-livro`
-**Commit(s) relevante(s):** `60dbbde` (OS), `41ea6f6` (Red), `3f92352` (Green)
+**Commit(s) relevante(s):** `60dbbde` (OS), `90223eb` (Red), `8db68bc` (Green)
 
 ## 1. Resumo do que foi feito
 
