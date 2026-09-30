@@ -2,7 +2,7 @@
 
 **Data:** 29/09/2026
 **Branch:** `os/060-capitulos-orfaos`
-**Commit(s) relevante(s):** `5419f2e` (OS), `6e9e0d4` (Red), `38bfda0` (Green)
+**Commit(s) relevante(s):** `5419f2e` (OS), `8e436fa` (Red), `38bfda0` (Green)
 
 ## 1. Resumo do que foi feito
 
