@@ -8,7 +8,7 @@ queue: sqlite
 # ultrapassar este valor, ele NÃO usa o Speaker pago mesmo com confirmação —
 # degrada para a voz local (fallback_speaker) com aviso ao usuário.
 # null = sem teto (qualquer estimativa segue o fluxo normal de confirmação).
-max_cost_per_book: null
+max_cost_per_book: 3.00
 
 # Retry de falha transitória na síntese (OS-043): nº total de tentativas e backoff
 # exponencial (o delay dobra a cada tentativa, até max_delay_seconds). Falha
