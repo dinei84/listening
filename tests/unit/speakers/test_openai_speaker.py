@@ -261,14 +261,22 @@ def test_openai_read_timeout_is_transient(monkeypatch):
 
 
 def test_openai_socket_timeout_is_transient(monkeypatch):
-    """`socket.timeout` É `TimeoutError` desde o Python 3.10 — o teste existe para
-    travar que a classificação não depende de qual dos dois nomes é usado."""
+    """`socket.timeout` é hoje um alias de `TimeoutError`, e o teste trava isso.
+
+    O `ruff` reescreve `socket.timeout` para `TimeoutError` automaticamente (UP041),
+    o que transformaria este teste numa cópia do anterior e apagaria o que ele
+    verifica. Por isso o alias é buscado por `getattr`, e a identidade é afirmada:
+    se um dia deixarem de ser o mesmo objeto, o teste falha e avisa — em vez de a
+    classificação passar a ter um buraco em silêncio.
+    """
     import socket
+
+    assert socket.timeout is TimeoutError
 
     speaker = _speaker()
 
     def estoura(*args, **kwargs):
-        raise socket.timeout("timed out")
+        raise socket.timeout("timed out")  # noqa: UP041 — o alias é o ponto do teste
 
     monkeypatch.setattr(speaker, "_post", estoura)
     with pytest.raises(TransientSpeakerError):

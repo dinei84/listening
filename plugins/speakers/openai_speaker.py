@@ -170,9 +170,22 @@ class OpenAISpeaker(Speaker):
             raise PermanentSpeakerError(
                 f"OpenAI respondeu {exc.code}; a requisição não deve ser repetida"
             ) from exc
-        except urllib.error.URLError as exc:
+        # `OSError`, e não `URLError`: o timeout de LEITURA acontece no
+        # `response.read()`, depois de a conexão estar estabelecida, e o
+        # `http.client` levanta `TimeoutError` cru — que NÃO é subclasse de
+        # `URLError`. Escapando das duas categorias, ele passava pelo retry da
+        # OS-043 (que só captura TransientSpeakerError) e derrubava o livro
+        # inteiro: 10 de 641 trechos na primeira rodada real, em 20/10/2026.
+        #
+        # `URLError` e `TimeoutError` são ambos `OSError`, assim como reset de
+        # conexão e cano quebrado. Toda falha de rede é retentável, então uma
+        # captura só cobre as quatro — e `HTTPError` continua tratado ACIMA, por
+        # status, porque ele também é `OSError` e aqui viraria transitório,
+        # fazendo o retry repetir credencial inválida até esgotar o backoff.
+        except OSError as exc:
             raise TransientSpeakerError(
-                f"falha de rede ao chamar a OpenAI: {exc}"
+                f"falha de rede ao chamar a OpenAI ({type(exc).__name__}: {exc}); "
+                "tentativa pode ser repetida"
             ) from exc
 
     def _post(self, payload: dict) -> bytes:
