@@ -221,6 +221,12 @@ Valores possíveis de status: `não iniciado` · `em andamento` · `implementado
 
     De passagem, esta medição deu o número que faltava para dimensionar o áudio: **1.001 caracteres → 61,0 s de fala**, o que põe o livro em ~10,9 h.
 
+67. **Não existe caminho para retomar um livro em `error` (achado em 20/10/2026)** — quando a síntese falha no meio, os chunks já persistidos ficam no banco, mas **nenhuma rota os reaproveita**: `POST /books/{id}/confirm` exige `pending_confirmation` e `POST /books/{id}/prioritize` devolve 409 para `error`. A única saída é reenviar o PDF, o que gera `book_id` novo, re-extrai tudo e **ressintetiza do zero**.
+
+    A máquinaria para retomar **já existe e funciona**: o `skip_sequences` da OS-022 faz o worker pular o que está persistido, e é o que salva um worker interrompido. Falta só a porta de entrada — algo como `POST /books/{id}/retry` que re-enfileire o Job preservando o áudio.
+
+    Custou pouco na rodada em que foi achado (10 trechos de Kokoro, gratuitos, ~1 min para refazer), **mas o custo cresce com o ponto da falha**: um livro que morre no trecho 500 de 641 jogaria fora ~45 min de GPU e os dólares já gastos no motor pago. Com a OS-063 corrigindo a causa mais provável de falha no meio, isto deixou de ser urgente — mas continua sendo a diferença entre perder um minuto e perder uma hora.
+
 ## 6. Riscos e bloqueios conhecidos
 
 - **Pendente (OS-041, decisão do dono de 2026-08-06): credenciais de TTS cloud para fechar o spike do nível premium.** O spike rodou sem chamadas pagas (opção 2 escolhida pelo dono): preços oficiais levantados, script pronto e baseline Kokoro sintetizado, mas a qualidade de voz em pt-BR — o critério decisivo do premium — **não foi ouvida** porque nenhuma credencial existe no ambiente. Para concluir: exportar as env vars do `scripts/spike_tts_cloud.py` (5 listadas no cabeçalho) e aprovar o orçamento pequeno (~12 chamadas de teste, centavos por provedor). Número para dimensionar (levantado 2026-08-06): livro técnico típico custa **US$ 8–16** nos patamares baratos (OpenAI tts-1 US$15/1M chars; Google Neural2 e Polly neural US$16/1M) e **US$ 16–20** no Chirp 3 HD / Polly generative / tts-1-hd (US$30/1M); **ElevenLabs é ~10× mais cara** (créditos, ~US$165/1M no plano Pro) — provavelmente fora do páreo antes da audição. OpenAI `gpt-4o-mini-tts` é o único com controle de emoção/ritmo via instrução (relevante à decisão #23) mas cobra por token, não por caractere — precisa de medição tokens/caractere para fechar custo.

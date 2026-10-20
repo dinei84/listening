@@ -56,9 +56,11 @@ inteiro junto.
   `pending_confirmation` e `prioritize` devolve 409 para `error`. Nesta rodada não
   custa nada (os 10 trechos são Kokoro, gratuitos, e reenviar refaz em ~1 min),
   mas é lacuna real — **registrar no backlog**, não resolver aqui.
-- **A mesma exposição no `LLMNormalizer`.** Ele faz chamada HTTP pelo mesmo
-  padrão e provavelmente tem o mesmo buraco. Fora do escopo desta OS, que é sobre
-  o Speaker; **registrar no backlog**.
+- ~~**A mesma exposição no `LLMNormalizer`.**~~ **Verificado durante a execução:
+  não tem.** Ele envolve a chamada em `except Exception` e degrada para o texto
+  original com aviso (`llm_normalizer.py:88`), então um timeout ali custa a
+  normalização daquele trecho, não o livro. A suposição registrada ao abrir a OS
+  estava errada, e não virou item de backlog.
 - **Revisar o valor de 120 s do timeout.** Com chunk de até 1.000 caracteres, 120 s
   é folgado; o problema não é o valor, é o que acontece quando ele estoura.
 
