@@ -38,16 +38,36 @@ Deve passar 100% sem tocar em rede, Tesseract ou Kokoro de verdade — todos os 
 
 ## 4. Subir a aplicação de verdade
 
-A aplicação tem **dois processos** que precisam rodar ao mesmo tempo, em janelas de terminal separadas (com o venv ativado nas duas):
+A aplicação tem **dois processos** que precisam rodar ao mesmo tempo: a API (que serve o player) e o worker (que processa os livros). **Faltar um é a causa mais comum de "está travado?"** neste projeto, e as duas metades falham de formas diferentes — sem worker, o player avisa (OS-051); **sem API não há player, então não há onde avisar nada**.
 
-### Terminal 1 — API
+### Caminho principal — um comando sobe os dois (desde a OS-061)
+
+```bash
+venv/bin/python scripts/run_app.py
+```
+
+Não precisa ativar o venv: o script usa o próprio interpretador com que foi chamado, então `venv/bin/python` já garante as dependências certas.
+
+Ele imprime a URL do player, e **os dois processos vivem e morrem juntos** — se um cair, o outro é encerrado e o comando sai com o código de quem morreu (decisão de 13/08/2026: falha rápida com aviso, em vez de meia aplicação de pé). `Ctrl+C` encerra os dois.
+
+Porta diferente:
+
+```bash
+venv/bin/python scripts/run_app.py --port 9000
+```
+
+### Alternativa — dois terminais, para ver os logs separados
+
+Útil quando você quer acompanhar só o worker, ou reiniciar um sem o outro. Exige o venv ativado nas duas janelas:
+
+#### Terminal 1 — API
 
 ```bash
 source venv/bin/activate
 uvicorn api.main:app --host 127.0.0.1 --port 8000
 ```
 
-### Terminal 2 — Worker
+#### Terminal 2 — Worker
 
 ```bash
 source venv/bin/activate
