@@ -2,7 +2,7 @@
 
 **Data:** 20/10/2026
 **Branch:** `os/063-timeout-de-leitura`
-**Commit(s) relevante(s):** `f2b7e5a` (OS), `06a30b2` (Red), `cefa644` (Green)
+**Commit(s) relevante(s):** `cc07bad` (OS), `63540b6` (Red), `cefa644` (Green)
 
 ## 1. Resumo do que foi feito
 
