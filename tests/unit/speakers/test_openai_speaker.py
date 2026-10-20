@@ -233,3 +233,107 @@ def test_openai_rewrites_streaming_wav_with_real_sizes(monkeypatch, tmp_path):
 
     with wave.open(chunk.file_path, "rb") as arquivo:
         assert arquivo.getnframes() == int(2.0 * 24000)
+
+
+# --------------------------------------------------------------------------
+# OS-063 — timeout de leitura escapava da classificação e matava o livro
+# --------------------------------------------------------------------------
+
+
+def test_openai_read_timeout_is_transient(monkeypatch):
+    """Achado na primeira rodada real de um livro inteiro (20/10/2026).
+
+    O timeout de LEITURA acontece no `response.read()`, depois de a conexão estar
+    estabelecida, e o `http.client` levanta `TimeoutError` cru — que **não** é
+    subclasse de `urllib.error.URLError`. Sem cair numa das duas categorias, ele
+    passava pelo `_synthesize_with_retry` (que só captura `TransientSpeakerError`)
+    e derrubava o livro: 10 de 641 trechos, com o primeiro chunk roteado para a
+    OpenAI levando tudo junto.
+    """
+    speaker = _speaker()
+
+    def estoura(*args, **kwargs):
+        raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(speaker, "_post", estoura)
+    with pytest.raises(TransientSpeakerError, match="rede|retent"):
+        speaker.synthesize("Uma frase qualquer.")
+
+
+def test_openai_socket_timeout_is_transient(monkeypatch):
+    """`socket.timeout` é hoje um alias de `TimeoutError`, e o teste trava isso.
+
+    O `ruff` reescreve `socket.timeout` para `TimeoutError` automaticamente (UP041),
+    o que transformaria este teste numa cópia do anterior e apagaria o que ele
+    verifica. Por isso o alias é buscado por `getattr`, e a identidade é afirmada:
+    se um dia deixarem de ser o mesmo objeto, o teste falha e avisa — em vez de a
+    classificação passar a ter um buraco em silêncio.
+    """
+    import socket
+
+    assert socket.timeout is TimeoutError
+
+    speaker = _speaker()
+
+    def estoura(*args, **kwargs):
+        raise socket.timeout("timed out")  # noqa: UP041 — o alias é o ponto do teste
+
+    monkeypatch.setattr(speaker, "_post", estoura)
+    with pytest.raises(TransientSpeakerError):
+        speaker.synthesize("Uma frase qualquer.")
+
+
+@pytest.mark.parametrize(
+    "erro",
+    [
+        ConnectionResetError("conexão reiniciada pelo par"),
+        ConnectionAbortedError("conexão abortada"),
+        BrokenPipeError("cano quebrado"),
+        OSError("falha de rede genérica"),
+    ],
+    ids=["reset", "aborted", "broken-pipe", "oserror"],
+)
+def test_openai_network_oserror_is_transient(monkeypatch, erro):
+    """Toda falha de rede é `OSError`; nenhuma pode escapar sem classificação —
+    foi escapar que custou o livro inteiro."""
+    speaker = _speaker()
+
+    def estoura(*args, **kwargs):
+        raise erro
+
+    monkeypatch.setattr(speaker, "_post", estoura)
+    with pytest.raises(TransientSpeakerError):
+        speaker.synthesize("Uma frase qualquer.")
+
+
+def test_openai_http_error_is_classified_before_generic_oserror(monkeypatch):
+    """`HTTPError` é subclasse de `URLError`, que é subclasse de `OSError`: se a
+    captura genérica vier antes, 401 viraria transitório e o retry ficaria
+    repetindo credencial inválida até o fim do backoff."""
+    import urllib.error
+
+    speaker = _speaker()
+
+    def estoura(*args, **kwargs):
+        raise urllib.error.HTTPError("url", 401, "Unauthorized", {}, None)
+
+    monkeypatch.setattr(speaker, "_post", estoura)
+    with pytest.raises(PermanentSpeakerError):
+        speaker.synthesize("Uma frase qualquer.")
+
+
+def test_openai_insufficient_quota_is_still_permanent_after_the_fix(monkeypatch):
+    """A classificação de saldo esgotado (429 com corpo) não pode ser engolida
+    pela captura genérica nova."""
+    import io
+    import urllib.error
+
+    speaker = _speaker()
+    corpo = io.BytesIO(b'{"error":{"type":"insufficient_quota"}}')
+
+    def estoura(*args, **kwargs):
+        raise urllib.error.HTTPError("url", 429, "Too Many Requests", {}, corpo)
+
+    monkeypatch.setattr(speaker, "_post", estoura)
+    with pytest.raises(PermanentSpeakerError, match="crédito"):
+        speaker.synthesize("Uma frase qualquer.")
